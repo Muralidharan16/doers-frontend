@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default to Dark for Gym SaaS */
+  --bg-main: #0a0b10;
+  --bg-surface: #16171d;
+  --accent: #d4ff00;
+  --text-main: #ffffff;
+  --text-muted: #94a3b8;
+  --border: #26272e;
+  
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  background-color: var(--bg-main);
+  min-height: 100vh;
+}
+
+.glass-card {
+  background: rgba(22, 23, 29, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+}
+
+.text-gradient {
+  background: linear-gradient(to right, #ffffff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
