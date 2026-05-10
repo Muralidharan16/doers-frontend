@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useLogin } from '@/features/auth';
 import { useTheme } from '@/shared/context/ThemeContext';
-import { Moon, Sun, Dumbbell } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -24,85 +24,78 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = (data: LoginFormData) => {
-    login(data);
-  };
+  const onSubmit = (data: LoginFormData) => login(data);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gym-black px-4 relative overflow-hidden font-sans">
-      {/* Background Decor */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-gym-lime/10 rounded-full blur-[120px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-gym-lime/5 rounded-full blur-[120px]" />
-
-      {/* Theme Toggle */}
+    <div className="min-h-screen bg-paper flex items-center justify-center px-4 relative">
+      {/* Theme toggle – classic style */}
       <button
         onClick={toggleTheme}
-        className="absolute top-6 right-6 p-3 rounded-xl bg-gym-dark/50 border border-gym-slate text-white hover:bg-gym-slate transition-all z-10"
+        className="absolute top-6 right-6 w-9 h-9 rounded-full border border-rule bg-paper flex items-center justify-center text-ink-60 hover:text-ink transition-colors"
       >
-        {theme === 'dark' ? <Sun className="w-5 h-5 text-gym-lime" /> : <Moon className="w-5 h-5" />}
+        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      {/* Login Card */}
-      <div className="w-full max-w-md z-10">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gym-lime rounded-2xl mb-4 shadow-[0_0_30px_rgba(212,255,0,0.3)]">
-            <Dumbbell className="w-8 h-8 text-black" />
+      {/* Card */}
+      <div className="w-full max-w-md animate-rise">
+        <div className="bg-paper border border-rule rounded-lg shadow-sm overflow-hidden">
+          {/* Header */}
+          <div className="px-8 pt-8 pb-6 text-center border-b border-rule">
+            <h1 className="font-serif text-4xl font-semibold tracking-wide text-ink">Doers</h1>
+            <p className="font-mono text-[11px] tracking-[0.18em] text-ink-60 uppercase mt-2">Studio Management</p>
           </div>
-          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">
-            DOERS <span className="text-gym-lime text-xl align-top">GYM</span>
-          </h1>
-          <p className="text-gym-slate/80 text-gray-400">Precision Performance Management</p>
-        </div>
 
-        <div className="bg-gym-dark/40 backdrop-blur-xl border border-gym-slate p-8 rounded-3xl shadow-2xl">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-300 ml-1">Work Email</label>
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="px-8 py-6 space-y-5">
+            <div>
+              <label className="block font-mono text-[10px] tracking-[0.12em] text-ink-60 uppercase mb-1">Email</label>
               <input
                 type="email"
                 placeholder="michael@doersgym.com"
-                className="w-full bg-gym-black/50 border border-gym-slate rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-gym-lime focus:ring-1 focus:ring-gym-lime transition-all"
+                className="w-full px-3 py-2 bg-transparent border border-rule rounded focus:outline-none focus:border-ink transition-colors font-sans text-sm"
                 {...register('email')}
               />
-              {errors.email && <p className="text-xs text-red-400 mt-1 ml-1">{errors.email.message}</p>}
+              {errors.email && <p className="text-xs text-red-500 mt-1 font-mono">{errors.email.message}</p>}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-300 ml-1">Password</label>
+            <div>
+              <label className="block font-mono text-[10px] tracking-[0.12em] text-ink-60 uppercase mb-1">Password</label>
               <input
                 type="password"
-                placeholder="••••••••"
-                className="w-full bg-gym-black/50 border border-gym-slate rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-gym-lime focus:ring-1 focus:ring-gym-lime transition-all"
+                placeholder="••••••"
+                className="w-full px-3 py-2 bg-transparent border border-rule rounded focus:outline-none focus:border-ink transition-colors font-sans text-sm"
                 {...register('password')}
               />
-              {errors.password && <p className="text-xs text-red-400 mt-1 ml-1">{errors.password.message}</p>}
+              {errors.password && <p className="text-xs text-red-500 mt-1 font-mono">{errors.password.message}</p>}
             </div>
 
             {error && (
-              <div className="text-sm text-red-400 bg-red-900/20 border border-red-900/30 p-4 rounded-xl">
-                {error.message || 'Authentication failed. Please check your credentials.'}
+              <div className="text-xs text-red-500 bg-red-50/50 p-3 rounded border border-red-200 font-mono">
+                {error.message || 'Login failed. Check credentials.'}
               </div>
             )}
 
             <button
               type="submit"
               disabled={isPending}
-              className="w-full bg-gym-lime hover:bg-gym-lime/90 text-black font-bold py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(212,255,0,0.2)] hover:shadow-[0_0_30px_rgba(212,255,0,0.4)] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-ink text-paper py-2.5 rounded font-medium hover:bg-ink/90 transition disabled:opacity-50 disabled:cursor-not-allowed font-sans text-sm tracking-wide"
             >
-              {isPending ? 'Authenticating...' : 'Sign In to Dashboard'}
+              {isPending ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
-          <div className="mt-8 text-center">
-            <a href="#" className="text-sm text-gray-500 hover:text-gym-lime transition-colors">
-              Request access or recover password
+          {/* Footer */}
+          <div className="px-8 pb-6 text-center border-t border-rule pt-5">
+            <a href="#" className="font-mono text-[10px] tracking-[0.12em] text-ink-60 hover:text-ink transition">
+              Forgot password?
             </a>
           </div>
         </div>
-        
-        <p className="text-center mt-8 text-gray-600 text-xs tracking-widest uppercase font-bold">
-          Powered by Doers Engine v2.0
-        </p>
+
+        {/* Fine print */}
+        <div className="text-center mt-6 font-mono text-[9px] tracking-[0.1em] text-ink-30">
+          SECURE ACCESS · DOERS GYM SAAS
+        </div>
       </div>
     </div>
   );
