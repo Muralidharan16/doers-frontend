@@ -27,14 +27,27 @@ export default {
         sans: ['Instrument Sans', 'sans-serif'],
       },
       animation: {
-        rise: 'rise 0.5s ease both',
+        'fade-up': 'fadeUp 0.65s cubic-bezier(0.15, 0.9, 0.25, 1)',
+        'breathe': 'breathe 6s ease-in-out infinite alternate',
+        'sync-pulse': 'syncPulse 1.6s ease-in-out infinite',
+        'sync-pulse-delay-1': 'syncPulse 1.6s ease-in-out infinite 0.2s',
+        'sync-pulse-delay-2': 'syncPulse 1.6s ease-in-out infinite 0.4s',
       },
       keyframes: {
-        rise: {
-          from: { opacity: '0', transform: 'translateY(12px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
+        fadeUp: {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        breathe: {
+          '0%': { opacity: '0.3', transform: 'scale(0.98)' },
+          '100%': { opacity: '0.7', transform: 'scale(1.02)' },
+        },
+        syncPulse: {
+          '0%, 100%': { opacity: '0.2', transform: 'scale(0.8)' },
+          '50%': { opacity: '1', transform: 'scale(1.2)' },
         },
       },
+
     },
   },
   plugins: [],
