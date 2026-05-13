@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { useLogin } from '@/features/auth';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { Sun, Moon, Eye, EyeOff } from 'lucide-react';
-import logo from '@/assets/logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -24,7 +23,13 @@ export default function LoginPage() {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setCurrentTime(
+        now.toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -40,190 +45,486 @@ export default function LoginPage() {
   });
 
   const onSubmit = (data: LoginFormData) => login(data);
+  const isDark = theme === 'dark';
+
+  const colors = {
+    bg: isDark ? '#0e0e0e' : '#f5f3ef',
+    card: isDark ? '#1c1c1c' : '#ffffff',
+    cardBorder: isDark ? '#2e2e2e' : '#e8e4de',
+    footerBg: isDark ? '#161616' : '#faf9f7',
+    inputBg: isDark ? '#111111' : '#ffffff',
+    inputBorder: isDark ? '#2e2e2e' : '#e8e4de',
+    inputFocus: isDark ? '#444444' : '#a8a29e',
+    inputText: isDark ? '#f0f0f0' : '#1a1a1a',
+    inputPlaceholder: isDark ? '#3a3a3a' : '#bdb8b2',
+    labelText: isDark ? '#888888' : '#525252',
+    mutedText: isDark ? '#666666' : '#8a8a8a',
+    bodyText: isDark ? '#aaaaaa' : '#5a5a5a',
+    headingText: isDark ? '#f0f0f0' : '#1a1a1a',
+    divider: isDark ? '#272727' : '#ede9e4',
+    btnBg: isDark ? '#f0f0f0' : '#1a1a1a',
+    btnText: isDark ? '#0e0e0e' : '#ffffff',
+    btnHover: isDark ? '#ffffff' : '#2a2a2a',
+    footerText: isDark ? '#555555' : '#9a9a9a',
+    syncDot: isDark ? '#e0e0e0' : '#1a1a1a',
+  };
 
   return (
-    <div className="min-h-screen bg-[#f8f6f2] dark:bg-[#121212] flex items-center justify-center px-4 py-8 relative overflow-hidden">
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: colors.bg,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '40px 20px',
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+      position: 'relative',
+    }}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
+
+        * { box-sizing: border-box; }
+
         @keyframes fadeUp {
-          0% { opacity: 0; transform: translateY(20px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes breathe {
-          0% { opacity: 0.3; transform: scale(0.98); }
-          100% { opacity: 0.7; transform: scale(1.02); }
+          from { opacity: 0; transform: translateY(24px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes syncPulse {
-          0%, 100% { opacity: 0.2; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1.2); }
+          0%, 100% { opacity: 0.15; transform: scale(0.75); }
+          50%       { opacity: 1;    transform: scale(1.25); }
         }
-        .animate-sync-pulse {
-          animation: syncPulse 1.6s ease-in-out infinite;
+        @keyframes ping {
+          0%        { transform: scale(1);   opacity: 0.5; }
+          75%, 100% { transform: scale(2.4); opacity: 0;   }
         }
-        .animate-sync-pulse-delay-1 {
-          animation: syncPulse 1.6s ease-in-out infinite 0.2s;
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
-        .animate-sync-pulse-delay-2 {
-          animation: syncPulse 1.6s ease-in-out infinite 0.4s;
+
+        .login-card {
+          animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          width: 100%;
+          max-width: 520px;
         }
-        .bg-radial-soft {
-          background: radial-gradient(ellipse at 50% 30%, rgba(255,255,240,0.5) 0%, rgba(248,246,242,0) 70%);
+
+        /* Subtle warm grid background */
+        .bg-texture {
+          position: fixed; inset: 0; pointer-events: none; z-index: 0;
+          background-image:
+            linear-gradient(to right, ${isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.018)'} 1px, transparent 1px),
+            linear-gradient(to bottom, ${isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.018)'} 1px, transparent 1px);
+          background-size: 40px 40px;
         }
-        .dark .bg-radial-soft {
-          background: radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.03) 0%, rgba(18,18,18,0) 70%);
+        .bg-vignette {
+          position: fixed; inset: 0; pointer-events: none; z-index: 0;
+          background: radial-gradient(ellipse at center,
+            transparent 40%,
+            ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.06)'} 100%
+          );
+        }
+
+        /* Input styles */
+        .input-luxury {
+          width: 100%;
+          padding: 15px 18px;
+          background: ${colors.inputBg};
+          border: 1px solid ${colors.inputBorder};
+          border-radius: 12px;
+          font-size: 14px;
+          font-family: 'Inter', sans-serif;
+          font-weight: 400;
+          color: ${colors.inputText};
+          outline: none;
+          transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+          letter-spacing: 0.01em;
+        }
+        .input-luxury::placeholder {
+          color: ${colors.inputPlaceholder};
+          font-weight: 300;
+        }
+        .input-luxury:hover {
+          border-color: ${isDark ? '#3a3a3a' : '#ccc8c2'};
+        }
+        .input-luxury:focus {
+          border-color: ${colors.inputFocus};
+          box-shadow: 0 0 0 4px ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)'};
+        }
+        .input-luxury.has-error {
+          border-color: #d97b6b;
+          box-shadow: 0 0 0 4px rgba(217,123,107,0.1);
+        }
+
+        /* Button */
+        .btn-primary {
+          width: 100%;
+          background: ${colors.btnBg};
+          color: ${colors.btnText};
+          border: none;
+          border-radius: 50px;
+          padding: 15px 24px;
+          font-size: 13.5px;
+          font-family: 'Inter', sans-serif;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          cursor: pointer;
+          transition: background 0.25s ease, transform 0.15s ease, box-shadow 0.25s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .btn-primary:hover:not(:disabled) {
+          background: ${colors.btnHover};
+          box-shadow: 0 8px 24px ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.14)'};
+          transform: translateY(-1px);
+        }
+        .btn-primary:active:not(:disabled) {
+          transform: translateY(0) scale(0.985);
+          box-shadow: none;
+        }
+        .btn-primary:disabled {
+          opacity: 0.35;
+          cursor: not-allowed;
+        }
+
+        /* Links */
+        .link-muted {
+          font-size: 12px;
+          color: ${colors.mutedText};
+          text-decoration: none;
+          transition: color 0.2s;
+          font-weight: 400;
+        }
+        .link-muted:hover { color: ${colors.headingText}; }
+
+        .link-bold {
+          color: ${colors.headingText};
+          font-weight: 600;
+          text-decoration: none;
+          border-bottom: 1px solid ${isDark ? '#3a3a3a' : '#d4d0ca'};
+          padding-bottom: 1px;
+          transition: border-color 0.2s, color 0.2s;
+        }
+        .link-bold:hover {
+          border-color: ${colors.headingText};
+        }
+
+        /* Animations */
+        .spin { animation: spin 0.75s linear infinite; }
+        .sync-dot {
+          width: 3px; height: 3px;
+          border-radius: 50%;
+          background: ${colors.syncDot};
+          animation: syncPulse 1.8s ease-in-out infinite;
+        }
+        .sync-dot:nth-child(2) { animation-delay: 0.25s; }
+        .sync-dot:nth-child(3) { animation-delay: 0.5s; }
+        .status-ping {
+          position: absolute; inset: 0;
+          border-radius: 50%;
+          background: #10b981;
+          opacity: 0.5;
+          animation: ping 2s ease-in-out infinite;
+        }
+
+        /* Theme toggle */
+        .theme-toggle {
+          position: fixed; top: 24px; right: 24px; z-index: 50;
+          width: 38px; height: 38px;
+          border-radius: 50%;
+          border: 1px solid ${colors.cardBorder};
+          background: ${isDark ? 'rgba(28,28,28,0.9)' : 'rgba(255,255,255,0.9)'};
+          backdrop-filter: blur(8px);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          color: ${colors.mutedText};
+          transition: color 0.2s, box-shadow 0.2s, border-color 0.2s;
+          box-shadow: 0 2px 8px ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)'};
+        }
+        .theme-toggle:hover {
+          color: ${colors.headingText};
+          box-shadow: 0 4px 16px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)'};
         }
       `}</style>
 
-      {/* Background layers */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
-        <div className="absolute inset-0 bg-radial-soft"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.02)_100%)]"></div>
-      </div>
-
-      {/* Ambient glow */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[500px] h-[600px] bg-[radial-gradient(ellipse_at_50%_45%,rgba(0,0,0,0.02)_0%,transparent_70%)] dark:bg-[radial-gradient(ellipse_at_50%_45%,rgba(255,255,255,0.02)_0%,transparent_70%)] rounded-full animate-[breathe_6s_ease-in-out_infinite_alternate]"></div>
-      </div>
+      {/* Background texture */}
+      <div className="bg-texture" />
+      <div className="bg-vignette" />
 
       {/* Theme toggle */}
-      <button
-        onClick={toggleTheme}
-        className="fixed top-6 right-6 z-20 w-9 h-9 rounded-full border border-[#ece8e2] dark:border-[#2a2a2a] bg-white/80 dark:bg-black/40 backdrop-blur-sm flex items-center justify-center text-[#5b5b5b] dark:text-[#9a9a9a] hover:text-[#1a1a1a] dark:hover:text-white transition-all duration-200 hover:shadow-sm"
-      >
-        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+      <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
+        {isDark ? <Sun size={15} /> : <Moon size={15} />}
       </button>
 
-      {/* Main card */}
-      <div className="w-full max-w-[500px] animate-[fadeUp_0.65s_cubic-bezier(0.15,0.9,0.25,1)]">
-        <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl border border-[#ece8e2] dark:border-[#2a2a2a] shadow-[0_25px_40px_-12px_rgba(0,0,0,0.08),0_2px_4px_rgba(0,0,0,0.01)] dark:shadow-[0_25px_40px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_30px_50px_-15px_rgba(0,0,0,0.12)] transition-all duration-300">
+      {/* Card */}
+      <div className="login-card" style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{
+          background: colors.card,
+          border: `1px solid ${colors.cardBorder}`,
+          borderRadius: 24,
+          boxShadow: isDark
+            ? '0 32px 64px -16px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03)'
+            : '0 32px 64px -16px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.03)',
+          overflow: 'hidden',
+          transition: 'box-shadow 0.4s ease',
+        }}>
 
-          {/* Header */}
-          <div className="pt-10 pb-6 px-8 text-center border-b border-[#ece8e2] dark:border-[#2a2a2a]">
-            <div className="flex justify-center mb-5">
+          {/* ── Header ── */}
+          <div style={{
+            padding: '48px 40px 32px',
+            textAlign: 'center',
+            borderBottom: `1px solid ${colors.divider}`,
+          }}>
+            {/* Logo */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
               {!imgError ? (
                 <img
-                  src={logo}
+                  src="/logo.png"
                   alt="Doers"
-                  className="h-12 w-auto object-contain"
+                  style={{
+                    height: 130,
+                    width: 'auto',
+                    objectFit: 'contain',
+                    filter: isDark ? 'invert(1) brightness(0.88)' : 'none',
+                    transition: 'filter 0.4s ease',
+                  }}
                   onError={() => setImgError(true)}
                 />
               ) : (
-                <div className="text-3xl font-serif font-semibold text-[#1a1a1a] dark:text-white">Doers</div>
+                <div style={{
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: '2.4rem',
+                  fontWeight: 500,
+                  color: colors.headingText,
+                  letterSpacing: '-0.02em',
+                }}>
+                  Doers
+                </div>
               )}
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-              <span className="text-[10px] font-mono tracking-[0.2em] text-[#7a7a7a] dark:text-[#6b6b6b] uppercase">
-                Fitness Operations
-              </span>
-              <span className="w-1 h-1 rounded-full bg-[#d4d0c8] dark:bg-[#3a3a3a]"></span>
-              <span className="text-[10px] font-mono tracking-[0.2em] text-[#7a7a7a] dark:text-[#6b6b6b] uppercase">
-                Biometric Core
-              </span>
-            </div>
-            <p className="text-sm text-[#5e5e5e] dark:text-[#9a9a9a] mt-5 leading-relaxed">
+
+            {/* Thin divider line */}
+            <div style={{
+              width: 40,
+              height: 1,
+              background: isDark ? '#333' : '#ddd9d3',
+              margin: '0 auto 20px',
+            }} />
+
+            {/* Tagline */}
+            <p style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: 13,
+              fontWeight: 400,
+              fontStyle: 'italic',
+              color: colors.bodyText,
+              margin: 0,
+              letterSpacing: '0.02em',
+              lineHeight: 1.7,
+            }}>
               Secure access for studios & athletic facilities
             </p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit(onSubmit)} className="px-8 pt-6 pb-5 space-y-5">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.04em] text-[#4b4b4b] dark:text-[#8a8a8a] mb-1.5 ml-1">Work email</label>
-              <input
-                type="email"
-                placeholder="alex@doers.studio"
-                className="w-full px-4 py-3.5 bg-white dark:bg-[#0f0f0f] border border-[#ece8e2] dark:border-[#2a2a2a] rounded-2xl focus:outline-none focus:border-[#b8b2a8] dark:focus:border-[#4a4a4a] focus:ring-2 focus:ring-black/5 dark:focus:ring-white/5 transition-all duration-200 hover:border-[#cbc3b8] dark:hover:border-[#3a3a3a] text-[#1a1a1a] dark:text-white"
-                {...register('email')}
-              />
-              {errors.email && <p className="text-xs text-red-500 mt-1 ml-1">{errors.email.message}</p>}
-            </div>
+          {/* ── Form ── */}
+          <div style={{ padding: '32px 40px 28px' }}>
+            <form onSubmit={handleSubmit(onSubmit)}>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.04em] text-[#4b4b4b] dark:text-[#8a8a8a] mb-1.5 ml-1">Password</label>
-              <div className="relative">
+              {/* Email */}
+              <div style={{ marginBottom: 20 }}>
+                <label htmlFor="email" style={{
+                  display: 'block',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  color: colors.labelText,
+                  marginBottom: 8,
+                }}>
+                  Work Email
+                </label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="··········"
-                  className="w-full px-4 py-3.5 bg-white dark:bg-[#0f0f0f] border border-[#ece8e2] dark:border-[#2a2a2a] rounded-2xl focus:outline-none focus:border-[#b8b2a8] dark:focus:border-[#4a4a4a] focus:ring-2 focus:ring-black/5 dark:focus:ring-white/5 transition-all duration-200 hover:border-[#cbc3b8] dark:hover:border-[#3a3a3a] pr-12 text-[#1a1a1a] dark:text-white"
-                  {...register('password')}
+                  id="email"
+                  type="email"
+                  placeholder="alex@doers.studio"
+                  autoComplete="email"
+                  className={`input-luxury${errors.email ? ' has-error' : ''}`}
+                  {...register('email')}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#9a9a9a] dark:text-[#6b6b6b] hover:text-[#1a1a1a] dark:hover:text-white transition"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                {errors.email && (
+                  <p style={{ fontSize: 11, color: '#c0695a', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ⚠ {errors.email.message}
+                  </p>
+                )}
               </div>
-              {errors.password && <p className="text-xs text-red-500 mt-1 ml-1">{errors.password.message}</p>}
-            </div>
 
-            {error && (
-              <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-200 dark:border-red-800">
-                {error.message || 'Authentication failed.'}
+              {/* Password */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <label htmlFor="password" style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color: colors.labelText,
+                  }}>
+                    Password
+                  </label>
+                  <a href="/forgot-password" className="link-muted">Forgot password?</a>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="··········"
+                    autoComplete="current-password"
+                    className={`input-luxury${errors.password ? ' has-error' : ''}`}
+                    style={{ paddingRight: 52 }}
+                    {...register('password')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    style={{
+                      position: 'absolute', right: 16, top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: colors.mutedText, display: 'flex', alignItems: 'center', padding: 0,
+                      transition: 'color 0.2s',
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p style={{ fontSize: 11, color: '#c0695a', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ⚠ {errors.password.message}
+                  </p>
+                )}
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={isPending}
-              className="w-full bg-[#191919] dark:bg-[#2a2a2a] hover:bg-[#2a2a2a] dark:hover:bg-[#3a3a3a] text-white font-medium py-3.5 px-4 rounded-full transition-all duration-200 transform active:scale-[0.98] disabled:opacity-50"
-            >
-              {isPending ? 'Signing in...' : 'Sign in to Console'}
-            </button>
+              {/* API error */}
+              {error && (
+                <div style={{
+                  fontSize: 12, lineHeight: 1.5,
+                  color: isDark ? '#f08070' : '#b94a3a',
+                  background: isDark ? 'rgba(180,60,40,0.12)' : '#fdf2f0',
+                  border: `1px solid ${isDark ? 'rgba(180,60,40,0.3)' : '#f5cdc8'}`,
+                  borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+                }}>
+                  {error.message || 'Authentication failed. Please try again.'}
+                </div>
+              )}
 
-            <div className="text-center">
-              <a href="#" className="text-xs text-[#8a8a8a] dark:text-[#7a7a7a] hover:text-[#1a1a1a] dark:hover:text-white transition-colors">Forgot password?</a>
-            </div>
-          </form>
+              {/* Submit */}
+              <button type="submit" disabled={isPending} className="btn-primary">
+                {isPending ? (
+                  <>
+                    <svg className="spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+                    </svg>
+                    Authenticating…
+                  </>
+                ) : 'Sign in to Console'}
+              </button>
 
-          {/* Footer - FIXED LAYOUT */}
-          <div className="bg-[#fefdfb] dark:bg-[#141414] border-t border-[#ece8e2] dark:border-[#2a2a2a] rounded-b-3xl px-8 py-6">
-            {/* Row 1: Systems Online + biometric count */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-600 opacity-40"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-700"></span>
+              {/* Divider */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '20px 0 14px' }}>
+                <div style={{ flex: 1, height: 1, background: colors.divider }} />
+                <span style={{
+                  fontSize: 9, fontWeight: 500,
+                  textTransform: 'uppercase', letterSpacing: '0.2em',
+                  color: isDark ? '#333' : '#ccc8c2',
+                }}>or</span>
+                <div style={{ flex: 1, height: 1, background: colors.divider }} />
+              </div>
+
+              {/* Sign up */}
+              <p style={{ textAlign: 'center', fontSize: 13, color: colors.mutedText, margin: 0, fontWeight: 300 }}>
+                New to Doers?{' '}
+                <a href="/signup" className="link-bold">Create an account</a>
+              </p>
+            </form>
+          </div>
+
+          {/* ── Footer ── */}
+          <div style={{
+            background: colors.footerBg,
+            borderTop: `1px solid ${colors.divider}`,
+            padding: '18px 40px 22px',
+          }}>
+            {/* Row 1 */}
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexWrap: 'wrap',
+              gap: 10, marginBottom: 14,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ position: 'relative', width: 8, height: 8, display: 'flex' }}>
+                  <div className="status-ping" />
+                  <div style={{ position: 'relative', width: 8, height: 8, borderRadius: '50%', background: '#059669' }} />
+                </div>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', color: colors.footerText }}>
+                  Systems Online
                 </span>
-                <span className="text-[11px] font-mono tracking-[0.04em] text-[#5a5a5a] dark:text-[#8a8a8a]">Systems Online</span>
-                <div className="flex gap-1 ml-2">
-                  <div className="w-1 h-1 rounded-full bg-[#1a1a1a] dark:bg-white animate-sync-pulse"></div>
-                  <div className="w-1 h-1 rounded-full bg-[#1a1a1a] dark:bg-white animate-sync-pulse-delay-1"></div>
-                  <div className="w-1 h-1 rounded-full bg-[#1a1a1a] dark:bg-white animate-sync-pulse-delay-2"></div>
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginLeft: 4 }}>
+                  <div className="sync-dot" />
+                  <div className="sync-dot" />
+                  <div className="sync-dot" />
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-[10px] font-mono text-[#7a7a7a] dark:text-[#6b6b6b]">
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 10, fontFamily: 'monospace', color: colors.footerText,
+              }}>
                 <span>🔒 AES‑256</span>
-                <span className="w-px h-3 bg-[#e0e0e0] dark:bg-[#3a3a3a]"></span>
-                <span className="flex items-center gap-1">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M12 2L15 8.5L22 9.5L17 14L18.5 21L12 17.5L5.5 21L7 14L2 9.5L9 8.5L12 2Z" />
-                  </svg>
-                  3 biometric devices
-                </span>
+                <div style={{ width: 1, height: 10, background: colors.divider }} />
+                <span>✦ 3 biometric devices</span>
               </div>
             </div>
 
-            {/* Row 2: Feature grid */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] font-mono text-[#898989] dark:text-[#6b6b6b] py-3 border-t border-[#ece8e2] dark:border-[#2a2a2a]">
-              <span className="flex items-center gap-1.5">✓ Real‑time attendance</span>
-              <span className="flex items-center gap-1.5">✓ Secure cloud sync</span>
-              <span className="flex items-center gap-1.5">✓ Biometric edge</span>
-              <span className="flex items-center gap-1.5">✓ SOC 2 Type II</span>
+            {/* Feature grid */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              gap: '5px 16px',
+              fontSize: 10, fontFamily: 'monospace',
+              color: colors.footerText,
+              padding: '12px 0',
+              borderTop: `1px solid ${colors.divider}`,
+            }}>
+              <span>✓ Real‑time attendance</span>
+              <span>✓ Secure cloud sync</span>
+              <span>✓ Biometric edge</span>
+              <span>✓ SOC 2 Type II</span>
             </div>
 
-            {/* Row 3: Last sync */}
-            <div className="text-right mt-3 text-[9px] font-mono tracking-wide text-[#b0aba0] dark:text-[#5a5a5a]">
+            {/* Last sync */}
+            <div style={{
+              textAlign: 'right', marginTop: 10,
+              fontSize: 9, fontFamily: 'monospace',
+              letterSpacing: '0.05em',
+              color: isDark ? '#383838' : '#ccc8c2',
+            }}>
               Last sync: {currentTime} UTC
             </div>
           </div>
         </div>
 
-        {/* Extra trust badges */}
-        <div className="text-center mt-5 text-[10px] font-mono tracking-wide text-[#8b8b8b] dark:text-[#6b6b6b] flex justify-center gap-5">
-          <span className="opacity-70">SOC 2 Type II</span>
-          <span className="opacity-70">HIPAA Compliant</span>
+        {/* Trust badges */}
+        <div style={{
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          gap: 14, marginTop: 22,
+          fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em',
+          color: isDark ? '#383838' : '#c4c0ba',
+        }}>
+          <span>SOC 2 Type II</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>HIPAA Compliant</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>ISO 27001</span>
         </div>
       </div>
     </div>
