@@ -5,6 +5,7 @@ import { AuthGuard } from '@/shared/components/AuthGuard';
 
 // Lazy load pages
 const LoginPage = lazy(() => import('@/pages/auth/login/page'));
+const SignupPage = lazy(() => import('@/pages/auth/signup/page'));
 const DashboardPage = lazy(() => import('@/pages/dashboard/page'));
 
 function App() {
@@ -14,13 +15,14 @@ function App() {
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/" element={<LoginPage />} />
             <Route path="/dashboard" element={
-  <AuthGuard>
-    <DashboardPage />
-  </AuthGuard>
-} />
+              <AuthGuard>
+                <DashboardPage />
+              </AuthGuard>
+            } />
           </Routes>
         </Suspense>
       </BrowserRouter>

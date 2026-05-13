@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/services/api/client';
-import type { LoginCredentials, AuthTokens, User } from '../types';
+import type { LoginCredentials, AuthTokens, User, SignupPayload } from '../types';
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<{ user: User; tokens: AuthTokens }> => {
@@ -12,6 +12,16 @@ export const authApi = {
         refresh_token: data.refresh_token,
       },
     };
+  },
+
+  signup: async (payload: SignupPayload): Promise<{ message: string }> => {
+    const response = await apiClient.post('/auth/signup', payload);
+    return response.data;
+  },
+
+  resendVerification: async (email: string): Promise<{ message: string }> => {
+    const response = await apiClient.post('/auth/resend-verification', { email });
+    return response.data;
   },
 
   refresh: async (refreshToken: string): Promise<AuthTokens> => {
