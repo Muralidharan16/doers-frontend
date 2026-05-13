@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { useSignup } from '@/features/auth';
 import { useTheme } from '@/shared/context/ThemeContext';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 import { Sun, Moon, Eye, EyeOff, ChevronRight, ChevronLeft, Building2, User, Lock } from 'lucide-react';
 import type { FacilityType } from '@/features/auth/types';
 import { FACILITY_TYPE_LABELS } from '@/features/auth/types';
@@ -104,7 +105,8 @@ export default function SignupPage() {
   const form2 = useForm<Step2Data>({ resolver: zodResolver(step2Schema), defaultValues: formData });
   const form3 = useForm<Step3Data>({ resolver: zodResolver(step3Schema) });
 
-  const watchPassword = form3.watch('password', '');
+  const selectedFacilityType = useWatch({ control: form1.control, name: 'facility_type' });
+  const watchPassword = useWatch({ control: form3.control, name: 'password' }) || '';
   const strength = getPasswordStrength(watchPassword);
 
   const onStep1 = (data: Step1Data) => {
@@ -429,7 +431,7 @@ export default function SignupPage() {
           <div style={{ padding: '32px 40px 28px' }}>
 
             {/* API error */}
-            {error && (
+            {error ? (
               <div style={{
                 fontSize: 12, lineHeight: 1.5, marginBottom: 20,
                 color: isDark ? '#f08070' : '#b94a3a',
@@ -437,9 +439,9 @@ export default function SignupPage() {
                 border: `1px solid ${isDark ? 'rgba(180,60,40,0.3)' : '#f5cdc8'}`,
                 borderRadius: 10, padding: '10px 14px',
               }}>
-                {(error as any)?.response?.data?.detail || 'Something went wrong. Please try again.'}
+                {getApiErrorMessage(error, 'Something went wrong. Please try again.')}
               </div>
-            )}
+            ) : null}
 
             {/* ═══ STEP 1: Organisation ═══ */}
             {step === 1 && (
@@ -455,16 +457,16 @@ export default function SignupPage() {
                       style={inputStyle(!!form1.formState.errors.org_name)}
                       {...form1.register('org_name')}
                     />
-                    {form1.formState.errors.org_name && (
-                      <p style={errorStyle}>⚠ {form1.formState.errors.org_name.message}</p>
-                    )}
+                    {form1.formState.errors.org_name ? (
+                      <p style={errorStyle}>⚠ {String(form1.formState.errors.org_name.message)}</p>
+                    ) : null}
                   </div>
 
                   <div style={fieldWrap}>
                     <label style={labelStyle}>Facility Type</label>
                     <select
                       className="select-el"
-                      style={{ color: form1.watch('facility_type') ? colors.inputText : colors.inputPlaceholder }}
+                      style={{ color: selectedFacilityType ? colors.inputText : colors.inputPlaceholder }}
                       {...form1.register('facility_type')}
                     >
                       <option value="" disabled>Select facility type…</option>
@@ -472,9 +474,9 @@ export default function SignupPage() {
                         <option key={val} value={val}>{label}</option>
                       ))}
                     </select>
-                    {form1.formState.errors.facility_type && (
-                      <p style={errorStyle}>⚠ {form1.formState.errors.facility_type.message}</p>
-                    )}
+                    {form1.formState.errors.facility_type ? (
+                      <p style={errorStyle}>⚠ {String(form1.formState.errors.facility_type.message)}</p>
+                    ) : null}
                   </div>
 
                   <button type="submit" className="btn-primary" style={{ marginTop: 8 }}>
@@ -498,9 +500,9 @@ export default function SignupPage() {
                       style={inputStyle(!!form2.formState.errors.owner_name)}
                       {...form2.register('owner_name')}
                     />
-                    {form2.formState.errors.owner_name && (
-                      <p style={errorStyle}>⚠ {form2.formState.errors.owner_name.message}</p>
-                    )}
+                    {form2.formState.errors.owner_name ? (
+                      <p style={errorStyle}>⚠ {String(form2.formState.errors.owner_name.message)}</p>
+                    ) : null}
                   </div>
 
                   <div style={fieldWrap}>
@@ -513,9 +515,9 @@ export default function SignupPage() {
                       style={inputStyle(!!form2.formState.errors.email)}
                       {...form2.register('email')}
                     />
-                    {form2.formState.errors.email && (
-                      <p style={errorStyle}>⚠ {form2.formState.errors.email.message}</p>
-                    )}
+                    {form2.formState.errors.email ? (
+                      <p style={errorStyle}>⚠ {String(form2.formState.errors.email.message)}</p>
+                    ) : null}
                   </div>
 
                   <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
@@ -564,7 +566,7 @@ export default function SignupPage() {
                     </div>
 
                     {/* Password strength bar */}
-                    {watchPassword.length > 0 && (
+                    {watchPassword.length > 0 ? (
                       <div style={{ marginTop: 10 }}>
                         <div style={{
                           display: 'flex', gap: 4, marginBottom: 5,
@@ -585,11 +587,11 @@ export default function SignupPage() {
                           {strength.label} password
                         </p>
                       </div>
-                    )}
+                    ) : null}
 
-                    {form3.formState.errors.password && (
-                      <p style={errorStyle}>⚠ {form3.formState.errors.password.message}</p>
-                    )}
+                    {form3.formState.errors.password ? (
+                      <p style={errorStyle}>⚠ {String(form3.formState.errors.password.message)}</p>
+                    ) : null}
                   </div>
 
                   {/* Confirm password */}
@@ -620,9 +622,9 @@ export default function SignupPage() {
                         {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                       </button>
                     </div>
-                    {form3.formState.errors.confirm_password && (
-                      <p style={errorStyle}>⚠ {form3.formState.errors.confirm_password.message}</p>
-                    )}
+                    {form3.formState.errors.confirm_password ? (
+                      <p style={errorStyle}>⚠ {String(form3.formState.errors.confirm_password.message)}</p>
+                    ) : null}
                   </div>
 
                   <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>

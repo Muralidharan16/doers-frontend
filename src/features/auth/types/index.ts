@@ -8,6 +8,12 @@ export interface AuthTokens {
   refresh_token: string;
 }
 
+export interface AuthResponse {
+  user: User;
+  tokens: AuthTokens;
+  onboarding_completed: boolean;
+}
+
 export interface User {
   id: string;
   email: string;

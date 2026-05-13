@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useLogin } from '@/features/auth';
 import { useTheme } from '@/shared/context/ThemeContext';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 import { Sun, Moon, Eye, EyeOff } from 'lucide-react';
 
 const loginSchema = z.object({
@@ -353,11 +354,11 @@ export default function LoginPage() {
                   className={`input-luxury${errors.email ? ' has-error' : ''}`}
                   {...register('email')}
                 />
-                {errors.email && (
+                {errors.email ? (
                   <p style={{ fontSize: 11, color: '#c0695a', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ⚠ {errors.email.message}
+                    ⚠ {String(errors.email.message)}
                   </p>
-                )}
+                ) : null}
               </div>
 
               {/* Password */}
@@ -399,15 +400,15 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                {errors.password && (
+                {errors.password ? (
                   <p style={{ fontSize: 11, color: '#c0695a', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ⚠ {errors.password.message}
+                    ⚠ {String(errors.password.message)}
                   </p>
-                )}
+                ) : null}
               </div>
 
               {/* API error */}
-              {error && (
+              {error ? (
                 <div style={{
                   fontSize: 12, lineHeight: 1.5,
                   color: isDark ? '#f08070' : '#b94a3a',
@@ -415,9 +416,9 @@ export default function LoginPage() {
                   border: `1px solid ${isDark ? 'rgba(180,60,40,0.3)' : '#f5cdc8'}`,
                   borderRadius: 10, padding: '10px 14px', marginBottom: 16,
                 }}>
-                  {error.message || 'Authentication failed. Please try again.'}
+                  {getApiErrorMessage(error, 'Authentication failed. Please try again.')}
                 </div>
-              )}
+              ) : null}
 
               {/* Submit */}
               <button type="submit" disabled={isPending} className="btn-primary">

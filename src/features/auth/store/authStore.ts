@@ -6,9 +6,12 @@ interface AuthState {
   user: User | null;
   tokens: AuthTokens | null;
   isAuthenticated: boolean;
-  setAuth: (user: User, tokens: AuthTokens) => void;
+  onboardingCompleted: boolean;
+  setAuth: (user: User, tokens: AuthTokens, onboardingCompleted: boolean) => void;
+  startCookieSession: (onboardingCompleted?: boolean) => void;
   clearAuth: () => void;
-  updateTokens: (tokens: AuthTokens) => void;
+  completeOnboarding: () => void;
+  updateTokens: (tokens: AuthTokens, onboardingCompleted?: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -17,9 +20,28 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       tokens: null,
       isAuthenticated: false,
-      setAuth: (user, tokens) => set({ user, tokens, isAuthenticated: true }),
-      clearAuth: () => set({ user: null, tokens: null, isAuthenticated: false }),
-      updateTokens: (tokens) => set({ tokens }),
+      onboardingCompleted: false,
+      setAuth: (user, tokens, onboardingCompleted) => set({
+        user,
+        tokens,
+        isAuthenticated: true,
+        onboardingCompleted,
+      }),
+      startCookieSession: (onboardingCompleted = false) => set({
+        isAuthenticated: true,
+        onboardingCompleted,
+      }),
+      clearAuth: () => set({
+        user: null,
+        tokens: null,
+        isAuthenticated: false,
+        onboardingCompleted: false,
+      }),
+      completeOnboarding: () => set({ onboardingCompleted: true }),
+      updateTokens: (tokens, onboardingCompleted) => set((state) => ({
+        tokens,
+        onboardingCompleted: onboardingCompleted ?? state.onboardingCompleted,
+      })),
     }),
     { name: 'auth-storage' }
   )
