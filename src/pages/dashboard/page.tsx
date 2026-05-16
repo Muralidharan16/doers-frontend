@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { useDashboardMetrics, useExpiringSubscriptions, useCollections, useAttendance } from '@/features/reports/hooks/useDashboard';
 import { Sun, Moon, TrendingUp, Users, UserPlus, AlertCircle, DollarSign, Calendar, Clock } from 'lucide-react';
@@ -18,17 +18,21 @@ export default function DashboardPage() {
   const isDark = theme === 'dark';
 
   const colors = {
-    bg: isDark ? '#0e0e0e' : '#f5f3ef',
-    card: isDark ? '#1c1c1c' : '#ffffff',
-    cardBorder: isDark ? '#2e2e2e' : '#e8e4de',
-    text: isDark ? '#f0f0f0' : '#1a1a1a',
-    textMuted: isDark ? '#888888' : '#525252',
-    textBody: isDark ? '#aaaaaa' : '#5a5a5a',
-    divider: isDark ? '#272727' : '#ede9e4',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    bg:          isDark ? '#0e0e0e' : '#f5f3ef',
+    card:        isDark ? '#1c1c1c' : '#ffffff',
+    cardBorder:  isDark ? '#2e2e2e' : '#e8e4de',
+    text:        isDark ? '#f0f0f0' : '#1a1a1a',
+    textMuted:   isDark ? '#888888' : '#525252',
+    textBody:    isDark ? '#aaaaaa' : '#5a5a5a',
+    divider:     isDark ? '#272727' : '#ede9e4',
+    success:     '#10b981',
+    warning:     '#f59e0b',
+    danger:      '#ef4444',
+    info:        '#3b82f6',
+    inputBg:     isDark ? '#111111' : '#ffffff',
+    inputBorder: isDark ? '#2e2e2e' : '#e8e4de',
+    inputFocus:  isDark ? '#444444' : '#a8a29e',
+    inputText:   isDark ? '#f0f0f0' : '#1a1a1a',
   };
 
   const kpiCards = [
@@ -73,8 +77,8 @@ export default function DashboardPage() {
     }
   };
 
-  const totalCollections = collectionsQuery.data?.reduce((sum, item) => sum + item.total, 0) || 0;
-  const maxAttendance = Math.max(...(attendanceQuery.data?.map(h => h.count) || [1]));
+  const totalCollections = collectionsQuery.data?.reduce((sum, item) => sum + Number(item.total), 0) || 0;
+  const maxAttendance = Math.max(...(attendanceQuery.data?.hours.map(h => h.count) || [1]));
 
   return (
     <div style={{
@@ -85,13 +89,18 @@ export default function DashboardPage() {
       position: 'relative',
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
 
         * { box-sizing: border-box; }
 
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
+        }
+
+        @keyframes shimmer {
+          0% { background-position: -400px 0; }
+          100% { background-position: 400px 0; }
         }
 
         .dashboard-container {
@@ -106,22 +115,30 @@ export default function DashboardPage() {
           border: 1px solid ${colors.cardBorder};
           border-radius: 12px;
           padding: 24px;
-          transition: all 0.3s ease;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          cursor: default;
         }
         .kpi-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 32px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.08)'};
+          transform: translateY(-3px);
+          box-shadow: 0 12px 32px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.06)'};
           border-color: ${isDark ? '#3a3a3a' : '#ddd9d3'};
         }
 
-        /* Section */
+        /* Section divider */
+        .section-divider {
+          height: 1px;
+          background: ${colors.divider};
+          margin: 32px 0;
+        }
+
+        /* Section Title */
         .section-title {
-          font-family: "'Playfair Display', Georgia, serif";
+          font-family: 'Playfair Display', Georgia, serif;
           font-size: 20px;
           font-weight: 500;
           color: ${colors.text};
           margin-bottom: 20px;
-          letter-spacing: '-0.01em';
+          letter-spacing: -0.01em;
         }
 
         /* Table */
@@ -184,12 +201,14 @@ export default function DashboardPage() {
           width: 100%;
           border-radius: 4px;
           min-height: 100px;
-          background: linear-gradient(to top, ${colors.info}, ${colors.info});
+          background: ${colors.info};
           opacity: 0.6;
-          transition: opacity 0.2s;
+          transition: all 0.2s;
+          cursor: default;
         }
         .heatmap-bar:hover {
           opacity: 1;
+          transform: scaleY(1.03);
         }
         .heatmap-label {
           font-size: 10px;
@@ -230,28 +249,37 @@ export default function DashboardPage() {
 
         /* Loading skeleton */
         .skeleton {
-          background: ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
-          border-radius: 8px;
-          animation: fadeIn 0.6s ease infinite alternate;
+          background: ${colors.card};
+          border: 1px solid ${colors.cardBorder};
+          border-radius: 12px;
+          position: relative;
+          overflow: hidden;
+        }
+        .skeleton::after {
+          content: "";
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: linear-gradient(90deg, transparent, ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'}, transparent);
+          background-size: 400px 100%;
+          animation: shimmer 1.5s infinite linear;
         }
 
-        /* Theme toggle */
-        .theme-toggle {
-          position: fixed; top: 24px; right: 24px; z-index: 50;
-          width: 38px; height: 38px;
-          border-radius: 50%;
-          border: 1px solid ${colors.cardBorder};
-          background: ${isDark ? 'rgba(28,28,28,0.9)' : 'rgba(255,255,255,0.9)'};
-          backdrop-filter: blur(8px);
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          color: ${colors.textMuted};
+        /* Input Luxury */
+        .input-luxury {
+          width: 100%;
+          padding: 10px 14px;
+          background: ${colors.inputBg};
+          border: 1px solid ${colors.inputBorder};
+          border-radius: 10px;
+          font-size: 13px;
+          font-family: 'Inter', sans-serif;
+          color: ${colors.inputText};
+          outline: none;
           transition: all 0.2s;
-          box-shadow: 0 2px 8px ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)'};
         }
-        .theme-toggle:hover {
-          color: ${colors.text};
-          box-shadow: 0 4px 16px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)'};
+        .input-luxury:focus {
+          border-color: ${colors.inputFocus};
+          box-shadow: 0 0 0 3px ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'};
         }
 
         /* Grid layout */
@@ -271,16 +299,8 @@ export default function DashboardPage() {
           .grid-2-full {
             grid-template-columns: 1fr;
           }
-          .table-header, .table-row {
-            grid-template-columns: 1fr 1fr;
-          }
         }
       `}</style>
-
-      {/* Theme toggle */}
-      <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
-        {isDark ? <Sun size={15} /> : <Moon size={15} />}
-      </button>
 
       {/* Main container */}
       <div className="dashboard-container">
@@ -310,7 +330,7 @@ export default function DashboardPage() {
         <div className="grid-2">
           {metricsQuery.isLoading ? (
             Array(4).fill(0).map((_, i) => (
-              <div key={i} className="kpi-card skeleton" style={{ height: 140 }} />
+              <div key={i} className="skeleton" style={{ height: 140 }} />
             ))
           ) : (
             kpiCards.map((card) => {
@@ -348,13 +368,32 @@ export default function DashboardPage() {
           )}
         </div>
 
+        <div className="section-divider" />
+
         {/* Collections and Attendance Row */}
         <div className="grid-2-full">
           {/* Collections */}
           <div>
-            <h3 className="section-title">Payment Collections</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 className="section-title" style={{ margin: 0 }}>Payment Collections</h3>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="date"
+                  className="input-luxury"
+                  value={dateRange.from}
+                  onChange={(e) => setDateRange(p => ({ ...p, from: e.target.value }))}
+                />
+                <span style={{ color: colors.textMuted }}>—</span>
+                <input
+                  type="date"
+                  className="input-luxury"
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange(p => ({ ...p, to: e.target.value }))}
+                />
+              </div>
+            </div>
             {collectionsQuery.isLoading ? (
-              <div className="collection-grid" style={{ height: 150 }} />
+              <div className="skeleton" style={{ height: 150 }} />
             ) : (
               <div className="collection-grid">
                 <div className="collection-item">
@@ -375,7 +414,7 @@ export default function DashboardPage() {
                     ₹{collectionsQuery.data?.reduce((sum, item) => sum + item.card, 0).toLocaleString('en-IN') || 0}
                   </div>
                 </div>
-                <div className="collection-item">
+                <div className="collection-item" style={{ borderLeft: `2px solid ${colors.success}` }}>
                   <div className="collection-label">Total</div>
                   <div className="collection-value" style={{ color: colors.success }}>
                     ₹{totalCollections.toLocaleString('en-IN')}
@@ -389,19 +428,21 @@ export default function DashboardPage() {
           <div>
             <h3 className="section-title">Peak Hours</h3>
             {attendanceQuery.isLoading ? (
-              <div className="heatmap-container" style={{ height: 150 }} />
+              <div className="skeleton" style={{ height: 150 }} />
             ) : (
               <div className="heatmap-container">
                 <div className="heatmap-hours">
-                  {attendanceQuery.data?.map((hour) => (
+                  {attendanceQuery.data?.hours.map((hour) => (
                     <div key={hour.hour} className="heatmap-hour">
                       <div
                         className="heatmap-bar"
                         style={{
+                          height: `${(hour.count / maxAttendance) * 100}%`,
                           opacity: Math.max(0.3, (hour.count / maxAttendance) * 0.9),
                         }}
+                        title={`Hour: ${hour.hour}:00, Check-ins: ${hour.count}`}
                       />
-                      <div className="heatmap-label">{String(hour.hour).padStart(2, '0')}:00</div>
+                      <div className="heatmap-label">{String(hour.hour).padStart(2, '0')}h</div>
                     </div>
                   ))}
                 </div>
@@ -410,6 +451,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="section-divider" />
+
         {/* Expiring Subscriptions */}
         <div>
           <h3 className="section-title">
@@ -417,7 +460,7 @@ export default function DashboardPage() {
             Expiring Soon (Next 7 Days)
           </h3>
           {expiringQuery.isLoading ? (
-            <div className="table-container" style={{ height: 250 }} />
+            <div className="skeleton" style={{ height: 250 }} />
           ) : expiringQuery.data && expiringQuery.data.length > 0 ? (
             <div className="table-container">
               <div className="table-header">
@@ -427,14 +470,14 @@ export default function DashboardPage() {
                 <div>Days</div>
               </div>
               {expiringQuery.data.map((subscription) => (
-                <div key={subscription.id} className="table-row">
+                <div key={subscription.member_id} className="table-row">
                   <div style={{ fontWeight: 500, color: colors.text }}>
                     {subscription.member_name}
                   </div>
                   <div>{subscription.email}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Calendar size={14} color={colors.warning} />
-                    {new Date(subscription.expiry_date).toLocaleDateString('en-IN')}
+                    {new Date(subscription.end_date).toLocaleDateString('en-IN')}
                   </div>
                   <div style={{
                     backgroundColor: subscription.days_remaining <= 3 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
@@ -455,7 +498,12 @@ export default function DashboardPage() {
               padding: 40,
               textAlign: 'center',
               color: colors.textMuted,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 12,
             }}>
+              <AlertCircle size={24} color={colors.textMuted} />
               <p style={{ margin: 0 }}>No subscriptions expiring in the next 7 days</p>
             </div>
           )}

@@ -59,8 +59,9 @@ export default function CheckInboxPage() {
   useEffect(() => {
     if (signupStatusQuery.data?.status !== 'verified') return;
 
-    startCookieSession(Boolean(signupStatusQuery.data.onboarding_completed));
-    navigate('/onboarding', { replace: true });
+    const isCompleted = Boolean(signupStatusQuery.data.onboarding_completed);
+    startCookieSession(isCompleted);
+    navigate(isCompleted ? '/dashboard' : '/onboarding', { replace: true });
   }, [navigate, signupStatusQuery.data, startCookieSession]);
 
   const canResend = Boolean(email) && !resendMutation.isPending;

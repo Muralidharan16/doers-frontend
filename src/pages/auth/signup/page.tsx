@@ -48,14 +48,14 @@ type Step3Data = z.infer<typeof step3Schema>;
 function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
   if (!pw) return { score: 0, label: '', color: 'transparent' };
   let score = 0;
-  if (pw.length >= 8)           score++;
-  if (/[A-Z]/.test(pw))         score++;
-  if (/[a-z]/.test(pw))         score++;
-  if (/[0-9]/.test(pw))         score++;
-  if (/[!@#$%^&*]/.test(pw))    score++;
-  if (score <= 2) return { score, label: 'Weak',   color: '#e05a4a' };
-  if (score <= 3) return { score, label: 'Fair',   color: '#d4943a' };
-  if (score === 4) return { score, label: 'Good',  color: '#6aab6a' };
+  if (pw.length >= 8) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[a-z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[!@#$%^&*]/.test(pw)) score++;
+  if (score <= 2) return { score, label: 'Weak', color: '#e05a4a' };
+  if (score <= 3) return { score, label: 'Fair', color: '#d4943a' };
+  if (score === 4) return { score, label: 'Good', color: '#6aab6a' };
   return { score, label: 'Strong', color: '#3a9a5a' };
 }
 
@@ -77,27 +77,27 @@ export default function SignupPage() {
   const isDark = theme === 'dark';
 
   const colors = {
-    bg:               isDark ? '#0e0e0e' : '#f5f3ef',
-    card:             isDark ? '#1c1c1c' : '#ffffff',
-    cardBorder:       isDark ? '#2e2e2e' : '#e8e4de',
-    footerBg:         isDark ? '#161616' : '#faf9f7',
-    inputBg:          isDark ? '#111111' : '#ffffff',
-    inputBorder:      isDark ? '#2e2e2e' : '#e8e4de',
-    inputFocus:       isDark ? '#444444' : '#a8a29e',
-    inputText:        isDark ? '#f0f0f0' : '#1a1a1a',
+    bg: isDark ? '#0e0e0e' : '#f5f3ef',
+    card: isDark ? '#1c1c1c' : '#ffffff',
+    cardBorder: isDark ? '#2e2e2e' : '#e8e4de',
+    footerBg: isDark ? '#161616' : '#faf9f7',
+    inputBg: isDark ? '#111111' : '#ffffff',
+    inputBorder: isDark ? '#2e2e2e' : '#e8e4de',
+    inputFocus: isDark ? '#444444' : '#a8a29e',
+    inputText: isDark ? '#f0f0f0' : '#1a1a1a',
     inputPlaceholder: isDark ? '#3a3a3a' : '#bdb8b2',
-    labelText:        isDark ? '#888888' : '#525252',
-    mutedText:        isDark ? '#666666' : '#8a8a8a',
-    bodyText:         isDark ? '#aaaaaa' : '#5a5a5a',
-    headingText:      isDark ? '#f0f0f0' : '#1a1a1a',
-    divider:          isDark ? '#272727' : '#ede9e4',
-    btnBg:            isDark ? '#f0f0f0' : '#1a1a1a',
-    btnText:          isDark ? '#0e0e0e' : '#ffffff',
-    btnHover:         isDark ? '#ffffff' : '#2a2a2a',
-    footerText:       isDark ? '#555555' : '#9a9a9a',
-    stepActive:       isDark ? '#f0f0f0' : '#1a1a1a',
-    stepDone:         isDark ? '#3a3a3a' : '#d4d0ca',
-    stepInactive:     isDark ? '#2a2a2a' : '#ece8e2',
+    labelText: isDark ? '#888888' : '#525252',
+    mutedText: isDark ? '#666666' : '#8a8a8a',
+    bodyText: isDark ? '#aaaaaa' : '#5a5a5a',
+    headingText: isDark ? '#f0f0f0' : '#1a1a1a',
+    divider: isDark ? '#272727' : '#ede9e4',
+    btnBg: isDark ? '#f0f0f0' : '#1a1a1a',
+    btnText: isDark ? '#0e0e0e' : '#ffffff',
+    btnHover: isDark ? '#ffffff' : '#2a2a2a',
+    footerText: isDark ? '#555555' : '#9a9a9a',
+    stepActive: isDark ? '#f0f0f0' : '#1a1a1a',
+    stepDone: isDark ? '#3a3a3a' : '#d4d0ca',
+    stepInactive: isDark ? '#2a2a2a' : '#ece8e2',
   };
 
   // ── Per-step forms ──
@@ -121,11 +121,11 @@ export default function SignupPage() {
 
   const onStep3 = (data: Step3Data) => {
     const payload = {
-      org_name:      formData.org_name!,
-      owner_name:    formData.owner_name!,
-      email:         formData.email!,
+      org_name: formData.org_name!,
+      owner_name: formData.owner_name!,
+      email: formData.email!,
       facility_type: formData.facility_type! as FacilityType,
-      password:      data.password,
+      password: data.password,
     };
     signup(payload, {
       onSuccess: () => {
@@ -135,7 +135,7 @@ export default function SignupPage() {
   };
 
   const stepLabels = ['Organisation', 'Owner', 'Security'];
-  const stepIcons  = [Building2, User, Lock];
+  const stepIcons = [Building2, User, Lock];
 
   const inputStyle = (hasError?: boolean): React.CSSProperties => ({
     width: '100%',
@@ -372,10 +372,10 @@ export default function SignupPage() {
             {/* ── Step indicator ── */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0 }}>
               {stepLabels.map((label, i) => {
-                const n        = i + 1;
+                const n = i + 1;
                 const isActive = step === n;
-                const isDone   = step > n;
-                const Icon     = stepIcons[i];
+                const isDone = step > n;
+                const Icon = stepIcons[i];
 
                 return (
                   <div key={n} style={{ display: 'flex', alignItems: 'center' }}>

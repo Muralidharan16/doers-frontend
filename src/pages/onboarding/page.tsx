@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, ChevronRight, LoaderCircle, MapPin, Moon, Sun } from 'lucide-react';
 import { onboardingApi } from '@/features/onboarding';
@@ -23,7 +23,25 @@ type OnboardingFormData = z.infer<typeof onboardingSchema>;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
-  const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
+  const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
+  const onboardingCompleted = useAuthStore((s) => s.onboardingCompleted);
+
+  const { data: statusData } = useQuery({
+    queryKey: ['onboarding-status'],
+    queryFn: () => onboardingApi.getStatus(),
+  });
+
+  useEffect(() => {
+    if (onboardingCompleted || statusData?.onboarding_completed) {
+      if (statusData?.onboarding_completed && !onboardingCompleted) {
+        completeOnboarding();
+        navigate('/dashboard', { replace: true });
+      } else if (onboardingCompleted) {
+        navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [onboardingCompleted, statusData, navigate, completeOnboarding]);
+
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const [imgError, setImgError] = useState(false);
@@ -96,6 +114,13 @@ export default function OnboardingPage() {
     onSuccess: () => {
       completeOnboarding();
       navigate('/dashboard', { replace: true });
+    },
+    onError: (err: any) => {
+      if (err.response?.status === 409) {
+        // Onboarding already completed, redirect to dashboard
+        completeOnboarding();
+        navigate('/dashboard', { replace: true });
+      }
     },
   });
 

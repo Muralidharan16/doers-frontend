@@ -10,4 +10,9 @@ export const onboardingApi = {
   complete: async (payload: CompleteOnboardingPayload): Promise<void> => {
     await apiClient.post('/onboarding/complete', payload);
   },
+
+  getStatus: async (): Promise<{ onboarding_completed: boolean }> => {
+    const response = await apiClient.get('/onboarding/status');
+    return response.data;
+  },
 };
