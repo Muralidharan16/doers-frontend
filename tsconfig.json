@@ -23,7 +23,7 @@
       "@pages/*": ["src/pages/*"]
     }
   },
-  "include": ["src", "src/vite-env.d.ts"],
+  "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }

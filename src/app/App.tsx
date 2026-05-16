@@ -8,6 +8,7 @@ import { TrialLockBanner } from '@/features/trial';
 const LoginPage = lazy(() => import('@/pages/auth/login/page'));
 const SignupPage = lazy(() => import('@/pages/auth/signup/page'));
 const CheckInboxPage = lazy(() => import('@/pages/auth/check-inbox/page'));
+const VerifySuccessPage = lazy(() => import('@/pages/auth/verify-success/page'));
 const OnboardingPage = lazy(() => import('@/pages/onboarding/page'));
 const DashboardPage = lazy(() => import('@/pages/dashboard/page'));
 const SubscriptionRequiredPage = lazy(() => import('@/pages/subscription-required/page'));
@@ -22,6 +23,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/check-inbox" element={<CheckInboxPage />} />
+            <Route path="/auth/verify-success" element={<VerifySuccessPage />} />
             <Route path="/onboarding" element={
               <AuthGuard requireOnboarding={false}>
                 <OnboardingPage />
