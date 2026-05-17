@@ -1,0 +1,182 @@
+import React, { useEffect, useState } from 'react';
+import { organizationApi } from '../services/organizationApi';
+import type { OrganizationProfile } from '../types';
+import { Loader2, Save, Globe, Info, Calendar, Megaphone, Building2, Check } from 'lucide-react';
+
+export const BasicInfoForm: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState<OrganizationProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      const data = await organizationApi.getProfile();
+      setProfile(data);
+    } catch (err) {
+      setError('Failed to load organization profile');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(false);
+      
+      const payload = {
+        name: profile.name,
+        tagline: profile.tagline,
+        description: profile.description,
+        year_established: profile.year_established,
+        website_url: profile.website_url,
+      };
+
+      await organizationApi.updateProfile(payload);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <Loader2 className="animate-spin text-ink/20" size={32} strokeWidth={1} />
+      </div>
+    );
+  }
+
+  if (error && !profile) {
+    return (
+      <div className="p-8 bg-destructive/5 text-destructive border border-destructive/10 rounded-luxury-sm text-xs font-mono uppercase tracking-widest">
+        {error}. Synchronisation required.
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-16">
+      <div className="space-y-4">
+        <div className="metadata-label opacity-40">Section 01 / Identity</div>
+        <h2 className="section-title">Institutional Identity</h2>
+        <p className="font-sans text-sm text-ink/40 font-light max-w-lg leading-relaxed">
+          Define your organization's core parameters and philosophical ethos within the platform's registry.
+        </p>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-destructive/5 text-destructive border border-destructive/10 rounded-luxury-sm text-[10px] font-mono uppercase tracking-[0.2em]">
+          {error}
+        </div>
+      )}
+      
+      {success && (
+        <div className="p-4 bg-gold/5 text-gold border border-gold/10 rounded-luxury-sm text-[10px] font-mono uppercase tracking-[0.2em] flex items-center gap-3">
+          <Check size={12} /> Registry Updated Successfully
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-10">
+        <div className="space-y-3">
+          <label className="metadata-label flex items-center gap-3">
+             <Building2 size={12} strokeWidth={1.5} className="opacity-40" /> Organization Title
+          </label>
+          <input 
+            className="luxury-input"
+            value={profile.name}
+            onChange={e => setProfile({...profile, name: e.target.value})}
+            placeholder="Executive Fitness Club"
+            required
+          />
+        </div>
+
+        <div className="space-y-3">
+          <label className="metadata-label flex items-center gap-3">
+             <Megaphone size={12} strokeWidth={1.5} className="opacity-40" /> Philosophy Tagline
+          </label>
+          <input 
+            className="luxury-input"
+            value={profile.tagline || ''}
+            onChange={e => setProfile({...profile, tagline: e.target.value})}
+            placeholder="Where excellence meets wellness"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="space-y-3">
+            <label className="metadata-label flex items-center gap-3">
+               <Calendar size={12} strokeWidth={1.5} className="opacity-40" /> Established
+            </label>
+            <input 
+              className="luxury-input"
+              type="number"
+              value={profile.year_established || ''}
+              onChange={e => setProfile({...profile, year_established: parseInt(e.target.value) || undefined})}
+              placeholder="2024"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="metadata-label flex items-center gap-3">
+               <Globe size={12} strokeWidth={1.5} className="opacity-40" /> Global URL
+            </label>
+            <input 
+              className="luxury-input"
+              type="url"
+              value={profile.website_url || ''}
+              onChange={e => setProfile({...profile, website_url: e.target.value})}
+              placeholder="https://doers.premium"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <label className="metadata-label flex items-center gap-3">
+             <Info size={12} strokeWidth={1.5} className="opacity-40" /> Institutional Ethos
+          </label>
+          <textarea 
+            className="luxury-input min-h-[180px] resize-none leading-loose py-5"
+            value={profile.description || ''}
+            onChange={e => setProfile({...profile, description: e.target.value})}
+            placeholder="The architectural ethos and visionary goals of your wellness space..."
+          />
+        </div>
+      </div>
+
+      <div className="pt-12 flex justify-end">
+        <button 
+          type="submit" 
+          className="btn-luxury-primary min-w-[240px] group transition-all duration-500"
+          disabled={saving}
+        >
+          {saving ? (
+            <Loader2 size={14} className="animate-spin opacity-40" />
+          ) : (
+            <div className="flex items-center gap-4">
+              <Save size={14} strokeWidth={1.5} className="transition-transform group-hover:scale-110" />
+              <span>Commit Registry Updates</span>
+            </div>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+};

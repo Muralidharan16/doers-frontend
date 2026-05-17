@@ -9,11 +9,11 @@ export const useLogin = () => {
 
   return useMutation({
     mutationFn: authApi.login,
-    onSuccess: ({ user, tokens }) => {
-      setAuth(user, tokens);
-      navigate('/dashboard', { replace: true });
+    onSuccess: ({ user, tokens, onboarding_completed }) => {
+      setAuth(user, tokens, onboarding_completed);
+      navigate(onboarding_completed ? '/dashboard' : '/onboarding', { replace: true });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       console.error('Login failed:', error);
     },
   });
