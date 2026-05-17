@@ -38,9 +38,21 @@ export const authApi = {
     return response.data;
   },
 
-  signupStatus: async (email: string): Promise<{ status: string; onboarding_completed?: boolean }> => {
+  signupStatus: async (email: string): Promise<{ 
+    status: string; 
+    onboarding_completed?: boolean;
+    access_token?: string;
+    refresh_token?: string;
+    user?: { id: string; email: string; name: string; };
+  }> => {
     const response = await apiClient.get('/auth/signup-status', { params: { email } });
-    return unwrap<{ status: string; onboarding_completed?: boolean }>(response.data);
+    return unwrap<{ 
+      status: string; 
+      onboarding_completed?: boolean;
+      access_token?: string;
+      refresh_token?: string;
+      user?: { id: string; email: string; name: string; };
+    }>(response.data);
   },
 
   refresh: async (refreshToken: string): Promise<AuthTokens & { onboarding_completed?: boolean }> => {

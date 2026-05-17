@@ -1,2 +1,1 @@
-declare const VerifySuccessPage: () => import("react/jsx-runtime").JSX.Element;
-export default VerifySuccessPage;
+export default function VerifySuccessPage(): import("react/jsx-runtime").JSX.Element;

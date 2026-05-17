@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CheckCircle2, LoaderCircle, Mail, Moon, RotateCcw, Sun } from 'lucide-react';
+import { LoaderCircle, Mail } from 'lucide-react';
 import { useAuthStore } from '@/features/auth';
 import { authApi } from '@/features/auth/services/authApi';
-import { useTheme } from '@/shared/context/ThemeContext';
 import { getApiErrorMessage } from '@/shared/lib/apiError';
+import { Button } from '@/components/ui/Button';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { DoersLogo } from '@/components/ui/DoersLogo';
 
 interface CheckInboxLocationState {
   email?: string;
@@ -14,31 +16,13 @@ interface CheckInboxLocationState {
 export default function CheckInboxPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const startCookieSession = useAuthStore((state) => state.startCookieSession);
-  const { theme, toggleTheme } = useTheme();
-  const [imgError, setImgError] = useState(false);
+  const setAuth = useAuthStore((state) => state.setAuth);
+
   const email = useMemo(() => {
     const stateEmail = (location.state as CheckInboxLocationState | null)?.email;
     const queryEmail = new URLSearchParams(location.search).get('email');
     return stateEmail || queryEmail || sessionStorage.getItem('signup-email') || '';
   }, [location.search, location.state]);
-  const isDark = theme === 'dark';
-
-  const colors = useMemo(() => ({
-    bg: isDark ? '#0e0e0e' : '#f5f3ef',
-    card: isDark ? '#1c1c1c' : '#ffffff',
-    cardBorder: isDark ? '#2e2e2e' : '#e8e4de',
-    footerBg: isDark ? '#161616' : '#faf9f7',
-    labelText: isDark ? '#888888' : '#525252',
-    mutedText: isDark ? '#666666' : '#8a8a8a',
-    bodyText: isDark ? '#aaaaaa' : '#5a5a5a',
-    headingText: isDark ? '#f0f0f0' : '#1a1a1a',
-    divider: isDark ? '#272727' : '#ede9e4',
-    btnBg: isDark ? '#f0f0f0' : '#1a1a1a',
-    btnText: isDark ? '#0e0e0e' : '#ffffff',
-    btnHover: isDark ? '#ffffff' : '#2a2a2a',
-    footerText: isDark ? '#555555' : '#9a9a9a',
-  }), [isDark]);
 
   const resendMutation = useMutation({
     mutationFn: authApi.resendVerification,
@@ -60,299 +44,145 @@ export default function CheckInboxPage() {
     if (signupStatusQuery.data?.status !== 'verified') return;
 
     const isCompleted = Boolean(signupStatusQuery.data.onboarding_completed);
-    startCookieSession(isCompleted);
+    const { user, access_token, refresh_token } = signupStatusQuery.data;
+    
+    if (user && access_token && refresh_token) {
+      setAuth(
+        user,
+        { access_token, refresh_token },
+        isCompleted
+      );
+    }
+    
     navigate(isCompleted ? '/dashboard' : '/onboarding', { replace: true });
-  }, [navigate, signupStatusQuery.data, startCookieSession]);
+  }, [navigate, signupStatusQuery.data, setAuth]);
 
   const canResend = Boolean(email) && !resendMutation.isPending;
-  const isVerified = signupStatusQuery.data?.status === 'verified';
-
-  const statusBoxStyle: CSSProperties = {
-    borderRadius: 14,
-    padding: '12px 14px',
-    fontSize: 12,
-    lineHeight: 1.5,
-    marginBottom: 18,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: colors.bg,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '40px 20px',
-      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-      position: 'relative',
-    }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
-        * { box-sizing: border-box; }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(24px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .check-inbox-card {
-          animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          width: 100%;
-          max-width: 520px;
-        }
-        .bg-texture {
-          position: fixed; inset: 0; pointer-events: none; z-index: 0;
-          background-image:
-            linear-gradient(to right, ${isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.018)'} 1px, transparent 1px),
-            linear-gradient(to bottom, ${isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.018)'} 1px, transparent 1px);
-          background-size: 40px 40px;
-        }
-        .bg-vignette {
-          position: fixed; inset: 0; pointer-events: none; z-index: 0;
-          background: radial-gradient(ellipse at center, transparent 40%, ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.06)'} 100%);
-        }
-        .theme-toggle {
-          position: fixed; top: 24px; right: 24px; z-index: 50;
-          width: 38px; height: 38px; border-radius: 50%;
-          border: 1px solid ${colors.cardBorder};
-          background: ${isDark ? 'rgba(28,28,28,0.9)' : 'rgba(255,255,255,0.9)'};
-          backdrop-filter: blur(8px);
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer; color: ${colors.mutedText};
-          transition: color 0.2s, box-shadow 0.2s;
-          box-shadow: 0 2px 8px ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)'};
-        }
-        .theme-toggle:hover { color: ${colors.headingText}; box-shadow: 0 4px 16px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)'}; }
-        .btn-primary {
-          width: 100%; background: ${colors.btnBg}; color: ${colors.btnText};
-          border: none; border-radius: 50px; padding: 15px 24px;
-          font-size: 13.5px; font-family: 'Inter', sans-serif; font-weight: 500;
-          letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer;
-          transition: background 0.25s ease, transform 0.15s ease, box-shadow 0.25s ease;
-          display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
-        .btn-primary:hover:not(:disabled) {
-          background: ${colors.btnHover};
-          box-shadow: 0 8px 24px ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.14)'};
-          transform: translateY(-1px);
-        }
-        .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
-        .link-muted {
-          color: ${colors.mutedText};
-          text-decoration: none;
-          font-size: 12px;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          transition: color 0.2s;
-        }
-        .link-muted:hover { color: ${colors.headingText}; }
-        .spin { animation: spin 0.75s linear infinite; }
-      `}</style>
+    <div 
+      className="min-h-screen font-sans flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-page)', color: 'var(--text-primary)' }}
+    >
+      <div className="absolute top-6 right-6">
+        <ThemeToggle />
+      </div>
 
-      <div className="bg-texture" />
-      <div className="bg-vignette" />
+      <div className="w-full max-w-[420px] px-2 sm:px-0 z-10 animate-fade-in">
+        <div className="mb-8">
+          <DoersLogo />
+        </div>
 
-      <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
-        {isDark ? <Sun size={15} /> : <Moon size={15} />}
-      </button>
-
-      <div className="check-inbox-card" style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{
-          background: colors.card,
-          border: `1px solid ${colors.cardBorder}`,
-          borderRadius: 24,
-          boxShadow: isDark
-            ? '0 32px 64px -16px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03)'
-            : '0 32px 64px -16px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.03)',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            padding: '42px 40px 34px',
-            textAlign: 'center',
-            borderBottom: `1px solid ${colors.divider}`,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              {!imgError ? (
-                <img
-                  src="/logo.png"
-                  alt="Doers"
-                  style={{
-                    height: 108,
-                    width: 'auto',
-                    objectFit: 'contain',
-                    filter: isDark ? 'invert(1) brightness(0.88)' : 'none',
-                    transition: 'filter 0.4s ease',
-                  }}
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                <div style={{
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  fontSize: '2.2rem',
-                  fontWeight: 500,
-                  color: colors.headingText,
-                }}>
-                  Doers
-                </div>
-              )}
-            </div>
-
-            <div style={{ width: 40, height: 1, background: isDark ? '#333' : '#ddd9d3', margin: '0 auto 18px' }} />
-
-            <div style={{
-              width: 54,
-              height: 54,
-              borderRadius: '50%',
-              border: `1px solid ${colors.cardBorder}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 18px',
-              color: colors.headingText,
-              background: isDark ? '#151515' : '#faf9f7',
-            }}>
-              <Mail size={22} />
-            </div>
-
-            <h1 style={{
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontSize: 26,
-              fontWeight: 500,
-              color: colors.headingText,
-              margin: '0 0 10px',
-            }}>
-              Check your inbox
-            </h1>
-
-            <p style={{
-              color: colors.bodyText,
-              fontSize: 13,
-              lineHeight: 1.7,
-              margin: 0,
-            }}>
-              {email ? (
-                <>We sent a verification link to <strong style={{ color: colors.headingText, fontWeight: 600 }}>{email}</strong>.</>
-              ) : (
-                'We sent a verification link to your registered email address.'
-              )}
-            </p>
-          </div>
-
-          <div style={{ padding: '30px 40px 28px' }}>
-            {resendMutation.isSuccess ? (
-              <div style={{
-                ...statusBoxStyle,
-                color: '#3a9a5a',
-                background: isDark ? 'rgba(58,154,90,0.12)' : '#eef8f1',
-                border: `1px solid ${isDark ? 'rgba(58,154,90,0.28)' : '#ccebd4'}`,
-              }}>
-                <CheckCircle2 size={15} />
-                <span>Verification email sent again.</span>
-              </div>
-            ) : null}
-
-            {email && !isVerified ? (
-              <div style={{
-                ...statusBoxStyle,
-                color: colors.bodyText,
-                background: isDark ? 'rgba(255,255,255,0.04)' : '#faf9f7',
-                border: `1px solid ${colors.divider}`,
-              }}>
-                <LoaderCircle className="spin" size={15} />
-                <span>Listening for verification. This page will continue automatically.</span>
-              </div>
-            ) : null}
-
-            {signupStatusQuery.error ? (
-              <div style={{
-                ...statusBoxStyle,
-                color: isDark ? '#f08070' : '#b94a3a',
-                background: isDark ? 'rgba(180,60,40,0.12)' : '#fdf2f0',
-                border: `1px solid ${isDark ? 'rgba(180,60,40,0.3)' : '#f5cdc8'}`,
-              }}>
-                <span>{getApiErrorMessage(signupStatusQuery.error, 'Could not check verification status.')}</span>
-              </div>
-            ) : null}
-
-            {resendMutation.error ? (
-              <div style={{
-                ...statusBoxStyle,
-                color: isDark ? '#f08070' : '#b94a3a',
-                background: isDark ? 'rgba(180,60,40,0.12)' : '#fdf2f0',
-                border: `1px solid ${isDark ? 'rgba(180,60,40,0.3)' : '#f5cdc8'}`,
-              }}>
-                <span>{getApiErrorMessage(resendMutation.error, 'Could not resend verification email.')}</span>
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={!canResend}
-              onClick={() => email && resendMutation.mutate(email)}
+        <div 
+          className="w-full transition-all duration-300"
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            border: '0.5px solid var(--border-default)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '2.5rem',
+          }}
+        >
+          <div className="flex flex-col items-center text-center space-y-6">
+            <div 
+              style={{
+                width: '40px',
+                height: '40px',
+                backgroundColor: 'var(--accent-subtle)',
+                border: '0.5px solid var(--accent)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
             >
-              {resendMutation.isPending ? (
-                <>
-                  <LoaderCircle className="spin" size={14} />
-                  Sending
-                </>
-              ) : (
-                <>
-                  <RotateCcw size={14} />
-                  Resend Email
-                </>
+              <Mail style={{ color: 'var(--accent)', width: '18px', height: '18px' }} />
+            </div>
+
+            <div className="space-y-2">
+              <h1 style={{ fontSize: '20px', fontWeight: 300, color: 'var(--text-primary)', margin: 0 }}>Check your inbox</h1>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                We sent a verification link to<br />
+                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{email || 'your email'}</span>
+              </p>
+            </div>
+
+            <div 
+              style={{
+                width: '100%',
+                backgroundColor: 'var(--bg-page)',
+                border: '0.5px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <LoaderCircle size={14} style={{ color: 'var(--accent)' }} className="animate-spin" />
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Listening for verification...</span>
+            </div>
+
+            <div className="w-full space-y-4 pt-2">
+              <Button 
+                type="button"
+                variant="secondary"
+                fullWidth
+                disabled={!canResend}
+                onClick={() => resendMutation.mutate(email)}
+                style={{ 
+                  border: '0.5px solid var(--border-strong)',
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'transparent',
+                  minHeight: '44px'
+                }}
+              >
+                {resendMutation.isPending ? 'Sending...' : 'Resend Email'}
+              </Button>
+              
+              {resendMutation.isSuccess && (
+                <p style={{ fontSize: '12px', color: 'var(--green)', margin: 0 }}>Verification email resent.</p>
               )}
-            </button>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              margin: '22px 0 16px',
-            }}>
-              <div style={{ flex: 1, height: 1, background: colors.divider }} />
-              <span style={{
-                fontSize: 9,
-                fontWeight: 500,
-                textTransform: 'uppercase',
-                letterSpacing: '0.2em',
-                color: isDark ? '#333' : '#ccc8c2',
-              }}>
-                or
-              </span>
-              <div style={{ flex: 1, height: 1, background: colors.divider }} />
+              {resendMutation.isError && (
+                <p style={{ fontSize: '12px', color: 'var(--red)', margin: 0 }}>
+                  {getApiErrorMessage(resendMutation.error, 'Failed to resend email.')}
+                </p>
+              )}
             </div>
 
-            <div style={{ textAlign: 'center' }}>
-              <Link to="/login" className="link-muted">
-                <ArrowLeft size={13} />
-                Back to sign in
-              </Link>
+            <div className="w-full flex items-center justify-between gap-4 py-2">
+              <div style={{ flex: 1, height: '0.5px', backgroundColor: 'var(--border-default)' }} />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>OR</span>
+              <div style={{ flex: 1, height: '0.5px', backgroundColor: 'var(--border-default)' }} />
             </div>
+
+            <Link 
+              to="/login" 
+              style={{ 
+                fontSize: '13px', 
+                color: 'var(--text-secondary)', 
+                textDecoration: 'none',
+                display: 'inline-block'
+              }}
+              className="hover:text-[var(--text-primary)] transition-colors"
+            >
+              ← Back to sign in
+            </Link>
           </div>
+        </div>
 
-          <div style={{
-            background: colors.footerBg,
-            borderTop: `1px solid ${colors.divider}`,
-            padding: '16px 40px 20px',
-          }}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '5px 16px',
-              fontSize: 10,
-              fontFamily: 'monospace',
-              color: colors.footerText,
-            }}>
-              <span>Secure verification</span>
-              <span>Owner access</span>
-              <span>Trial pending</span>
-              <span>Console ready</span>
-            </div>
-          </div>
+        {/* Footer metadata row */}
+        <div 
+          className="grid grid-cols-2 gap-4 mt-8 text-center"
+          style={{
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase'
+          }}
+        >
+          <div>Secure Verification</div>
+          <div>Trial Pending</div>
         </div>
       </div>
     </div>

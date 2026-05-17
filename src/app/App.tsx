@@ -1,4 +1,3 @@
-import { RouterProvider } from 'react-router-dom';
 import { Providers } from './providers';
 import { AppRouter } from './router';
 

@@ -11,18 +11,26 @@ const CheckInboxPage = lazy(() => import('@/pages/auth/check-inbox/page'));
 const VerifySuccessPage = lazy(() => import('@/pages/auth/verify-success/page'));
 const OnboardingPage = lazy(() => import('@/pages/onboarding/page'));
 const DashboardPage = lazy(() => import('@/pages/dashboard/page'));
+const SettingsPage = lazy(() => import('@/pages/settings/page'));
 const SubscriptionRequiredPage = lazy(() => import('@/pages/subscription-required/page'));
 
-// Neutral Suspense fallback as requested
+// New screens lazy imports
+const MembersPage = lazy(() => import('@/pages/members/page'));
+const SubscriptionsPage = lazy(() => import('@/pages/subscriptions/page'));
+const PaymentsPage = lazy(() => import('@/pages/billing/page'));
+const ReportsPage = lazy(() => import('@/pages/reports/page'));
+const AttendancePage = lazy(() => import('@/pages/attendance/page'));
+const GymsPage = lazy(() => import('@/pages/gyms/page'));
+
+// Classical Luxury Suspense fallback
 const Fallback = () => (
-  <div style={{
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f5f3ef'
-  }}>
-    <div style={{ color: '#1a1a1a', fontSize: '14px', fontFamily: 'sans-serif' }}>Loading...</div>
+  <div className="min-h-screen flex items-center justify-center bg-[var(--bg-page)] animate-fade-in">
+    <div className="flex flex-col items-center gap-8">
+      <div className="w-10 h-10 rounded-sm border-[1px] border-[var(--border-strong)] border-t-[var(--accent)] animate-spin" />
+      <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-mono animate-pulse">
+        Initializing Registry Experience
+      </div>
+    </div>
   </div>
 );
 
@@ -82,6 +90,104 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <Suspense fallback={<Fallback />}><DashboardPage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'members',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><MembersPage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'subscriptions',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><SubscriptionsPage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'billing',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><PaymentsPage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'reports',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><ReportsPage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'attendance',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><AttendancePage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'gyms',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><GymsPage /></Suspense>,
+          }
+        ]
+      },
+      {
+        path: 'settings',
+        element: (
+          <AuthGuard>
+            <DashboardLayout />
+          </AuthGuard>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Suspense fallback={<Fallback />}><SettingsPage /></Suspense>,
           }
         ]
       },

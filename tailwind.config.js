@@ -3,51 +3,56 @@ export default {
   darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
+    screens: {
+      'xs': '375px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1440px'
+    },
     extend: {
       colors: {
-        ink: {
-          DEFAULT: '#0f0f0d',
-          60: 'rgba(15,15,13,0.6)',
-          30: 'rgba(15,15,13,0.3)',
-          10: 'rgba(15,15,13,0.08)',
-        },
-        paper: {
-          DEFAULT: '#f5f3ee',
-          alt: '#ede9e1',
-        },
-        gold: {
-          DEFAULT: '#b8935a',
-          light: '#f0e8d8',
-        },
-        rule: 'rgba(15,15,13,0.12)',
+        paper: 'var(--paper)',
+        surface: 'var(--surface)',
+        ink: 'var(--ink)',
+        'ink-muted': 'var(--ink-muted)',
+        'ink-subtle': 'var(--ink-subtle)',
+        gold: 'var(--gold)',
+        'gold-soft': 'var(--gold-soft)',
+        destructive: 'var(--destructive)',
       },
       fontFamily: {
-        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
-        mono: ['Geist Mono', 'monospace'],
-        sans: ['Instrument Sans', 'sans-serif'],
+        serif: ['"Cormorant Garamond"', 'serif'],
+        sans: ['"Instrument Sans"', 'sans-serif'],
+        mono: ['"Geist Mono"', 'monospace'],
+      },
+      borderRadius: {
+        'luxury': '8px',
+        'luxury-sm': '4px',
+      },
+      spacing: {
+        '18': '4.5rem',
+        '22': '5.5rem',
+      },
+      letterSpacing: {
+        tightest: '-.05em',
+        widest: '.3em',
       },
       animation: {
-        'fade-up': 'fadeUp 0.65s cubic-bezier(0.15, 0.9, 0.25, 1)',
-        'breathe': 'breathe 6s ease-in-out infinite alternate',
-        'sync-pulse': 'syncPulse 1.6s ease-in-out infinite',
-        'sync-pulse-delay-1': 'syncPulse 1.6s ease-in-out infinite 0.2s',
-        'sync-pulse-delay-2': 'syncPulse 1.6s ease-in-out infinite 0.4s',
+        'subtle-up': 'subtleUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+        'fade-in': 'fadeIn 0.6s ease-out',
       },
       keyframes: {
-        fadeUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
+        subtleUp: {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        breathe: {
-          '0%': { opacity: '0.3', transform: 'scale(0.98)' },
-          '100%': { opacity: '0.7', transform: 'scale(1.02)' },
-        },
-        syncPulse: {
-          '0%, 100%': { opacity: '0.2', transform: 'scale(0.8)' },
-          '50%': { opacity: '1', transform: 'scale(1.2)' },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
       },
-
     },
   },
   plugins: [],
