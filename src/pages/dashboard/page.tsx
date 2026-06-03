@@ -1,465 +1,588 @@
-import { useState, useEffect } from 'react';
-import { useTheme } from '@/shared/context/ThemeContext';
-import { useDashboardMetrics, useExpiringSubscriptions, useCollections, useAttendance } from '@/features/reports/hooks/useDashboard';
-import { Sun, Moon, TrendingUp, Users, UserPlus, AlertCircle, DollarSign, Calendar, Clock } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useDashboardMetrics, useExpiringSubscriptions, useCollections, useAttendance } from '@/features/reports';
+import {
+  TrendingUp,
+  Users,
+  UserPlus,
+  AlertCircle,
+  DollarSign,
+  Calendar,
+  Clock,
+  ChevronDown,
+  RefreshCw,
+  ArrowRight,
+  MessageCircle,
+} from 'lucide-react';
+
+const numberFormatter = new Intl.NumberFormat('en-IN', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+const currencyFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+// Skeleton loader component
+function SkeletonLoader({ width = 'w-full', height = 'h-12' }: { width?: string; height?: string }) {
+  return <div className={`${width} ${height} bg-bg-card-hover rounded-lg animate-pulse`} />;
+}
+
+// Error state component
+function ErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-center gap-4 p-8 bg-bg-card border border-border-default rounded-lg">
+      <AlertCircle size={20} className="text-ruby" />
+      <div>
+        <p className="text-text-secondary font-body text-sm">Failed to load data</p>
+        <p className="text-text-muted font-body text-xs mt-1">Please try again</p>
+      </div>
+      <button
+        onClick={onRetry}
+        className="ml-auto px-4 py-2 bg-gold/10 hover:bg-gold/15 text-gold rounded-lg text-sm font-body font-medium transition-colors"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
+// KPI Card component
+function KPICard({
+  label,
+  value,
+  icon: Icon,
+  accentColor,
+  trend,
+  isLoading,
+  error,
+  onRetry,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ComponentType<{ size: number; className: string }>;
+  accentColor: 'gold' | 'sapphire' | 'sage' | 'amber' | 'ruby';
+  trend?: { direction: 'up' | 'down'; value: number; label: string };
+  isLoading?: boolean;
+  error?: boolean;
+  onRetry?: () => void;
+}) {
+  const accentClasses = {
+    gold: 'border-t-gold',
+    sapphire: 'border-t-sapphire',
+    sage: 'border-t-sage',
+    amber: 'border-t-amber',
+    ruby: 'border-t-ruby',
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-bg-card border border-border-subtle rounded-lg p-6 space-y-4">
+        <SkeletonLoader width="w-2/3" height="h-4" />
+        <SkeletonLoader width="w-full" height="h-10" />
+        <SkeletonLoader width="w-1/2" height="h-3" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-bg-card border border-border-subtle rounded-lg p-6">
+        <ErrorState onRetry={onRetry || (() => {})} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`
+        bg-bg-card border-l-4 ${accentClasses[accentColor]} border-border-subtle rounded-lg p-6
+        hover:border-border-default hover:shadow-lg transition-all duration-300 cursor-default
+        hover:translate-y-[-3px]
+      `}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+          {label}
+        </span>
+        <Icon size={20} className={`text-${accentColor}`} />
+      </div>
+
+      <div className="font-display text-4xl font-normal text-text-primary mb-4">
+        {value}
+      </div>
+
+      {trend && (
+        <div className="flex items-center gap-2 text-xs text-text-secondary">
+          {trend.direction === 'up' ? (
+            <TrendingUp size={14} className="text-sage" />
+          ) : (
+            <TrendingUp size={14} className="text-ruby rotate-180" />
+          )}
+          <span>
+            {trend.value}% <span className="text-text-muted">{trend.label}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
-  const { theme, toggleTheme } = useTheme();
+  // State
   const [dateRange, setDateRange] = useState({
     from: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0],
   });
 
+  // Queries
   const metricsQuery = useDashboardMetrics();
   const expiringQuery = useExpiringSubscriptions(7);
   const collectionsQuery = useCollections(dateRange.from, dateRange.to);
   const attendanceQuery = useAttendance(30);
 
-  const isDark = theme === 'dark';
+  // Computed values
+  const totalCollections = useMemo(
+    () => collectionsQuery.data?.reduce((sum, item) => sum + item.total, 0) || 0,
+    [collectionsQuery.data]
+  );
 
-  const colors = {
-    bg: isDark ? '#0e0e0e' : '#f5f3ef',
-    card: isDark ? '#1c1c1c' : '#ffffff',
-    cardBorder: isDark ? '#2e2e2e' : '#e8e4de',
-    text: isDark ? '#f0f0f0' : '#1a1a1a',
-    textMuted: isDark ? '#888888' : '#525252',
-    textBody: isDark ? '#aaaaaa' : '#5a5a5a',
-    divider: isDark ? '#272727' : '#ede9e4',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+  const collectionBreakdown = useMemo(() => {
+    if (!collectionsQuery.data) return { cash: 0, upi: 0, card: 0, total: 0 };
+    return {
+      cash: collectionsQuery.data.reduce((sum, item) => sum + item.cash, 0),
+      upi: collectionsQuery.data.reduce((sum, item) => sum + item.upi, 0),
+      card: collectionsQuery.data.reduce((sum, item) => sum + item.card, 0),
+      total: totalCollections,
+    };
+  }, [collectionsQuery.data, totalCollections]);
+
+  const maxAttendance = useMemo(
+    () => Math.max(...(attendanceQuery.data?.map(h => h.count) || [1])),
+    [attendanceQuery.data]
+  );
+
+  const peakHours = useMemo(() => {
+    if (!attendanceQuery.data || attendanceQuery.data.length === 0) return '';
+    const sorted = [...attendanceQuery.data].sort((a, b) => b.count - a.count).slice(0, 3);
+    return sorted.map(h => `${String(h.hour).padStart(2, '0')}:00`).join(', ');
+  }, [attendanceQuery.data]);
+
+  const getAttendanceColor = (count: number, max: number) => {
+    const percentage = (count / max) * 100;
+    if (percentage > 70) return 'bg-gold';
+    if (percentage > 40) return 'bg-gold-dark';
+    if (percentage > 15) return 'bg-bg-card-hover';
+    return 'bg-border-subtle';
   };
-
-  const kpiCards = [
-    {
-      title: 'Total Revenue',
-      value: metricsQuery.data?.total_revenue_month || 0,
-      icon: DollarSign,
-      color: colors.success,
-      format: 'currency',
-    },
-    {
-      title: 'Active Members',
-      value: metricsQuery.data?.active_members || 0,
-      icon: Users,
-      color: colors.info,
-      format: 'number',
-    },
-    {
-      title: 'New Members',
-      value: metricsQuery.data?.new_members_month || 0,
-      icon: UserPlus,
-      color: colors.info,
-      format: 'number',
-    },
-    {
-      title: 'Churn Rate',
-      value: metricsQuery.data?.churn_rate || 0,
-      icon: TrendingUp,
-      color: metricsQuery.data?.churn_rate && metricsQuery.data.churn_rate > 15 ? colors.danger : colors.warning,
-      format: 'percentage',
-    },
-  ];
-
-  const formatValue = (value: number, format: string) => {
-    switch (format) {
-      case 'currency':
-        return `₹${value.toLocaleString('en-IN')}`;
-      case 'percentage':
-        return `${value.toFixed(1)}%`;
-      default:
-        return value.toLocaleString('en-IN');
-    }
-  };
-
-  const totalCollections = collectionsQuery.data?.reduce((sum, item) => sum + item.total, 0) || 0;
-  const maxAttendance = Math.max(...(attendanceQuery.data?.map(h => h.count) || [1]));
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: colors.bg,
-      padding: '32px 24px',
-      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-      position: 'relative',
-    }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
+    <div className="w-full space-y-8">
+      {/* Block 1 — Page Header */}
+      <div className="space-y-4">
+        <div className="flex items-end justify-between gap-6">
+          <div className="flex-1">
+            <h1 className="font-display text-4xl italic font-light text-text-primary mb-2">
+              Good morning, Admin
+            </h1>
+            <p className="text-text-muted font-body text-sm">
+              Track your gym performance and member activity at a glance.
+            </p>
+          </div>
 
-        * { box-sizing: border-box; }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        .dashboard-container {
-          max-width: 1400px;
-          margin: 0 auto;
-          animation: fadeIn 0.6s ease;
-        }
-
-        /* KPI Cards */
-        .kpi-card {
-          background: ${colors.card};
-          border: 1px solid ${colors.cardBorder};
-          border-radius: 12px;
-          padding: 24px;
-          transition: all 0.3s ease;
-        }
-        .kpi-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 32px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.08)'};
-          border-color: ${isDark ? '#3a3a3a' : '#ddd9d3'};
-        }
-
-        /* Section */
-        .section-title {
-          font-family: "'Playfair Display', Georgia, serif";
-          font-size: 20px;
-          font-weight: 500;
-          color: ${colors.text};
-          margin-bottom: 20px;
-          letter-spacing: '-0.01em';
-        }
-
-        /* Table */
-        .table-container {
-          background: ${colors.card};
-          border: 1px solid ${colors.cardBorder};
-          border-radius: 12px;
-          overflow: hidden;
-        }
-        .table-header {
-          background: ${isDark ? '#141414' : '#faf9f7'};
-          border-bottom: 1px solid ${colors.divider};
-          padding: 16px 24px;
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr 0.5fr;
-          gap: 16px;
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: ${colors.textMuted};
-        }
-        .table-row {
-          padding: 16px 24px;
-          border-bottom: 1px solid ${colors.divider};
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr 0.5fr;
-          gap: 16px;
-          align-items: center;
-          font-size: 14px;
-          color: ${colors.textBody};
-        }
-        .table-row:last-child {
-          border-bottom: none;
-        }
-        .table-row:hover {
-          background: ${isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'};
-        }
-
-        /* Chart */
-        .heatmap-container {
-          background: ${colors.card};
-          border: 1px solid ${colors.cardBorder};
-          border-radius: 12px;
-          padding: 24px;
-        }
-        .heatmap-hours {
-          display: grid;
-          grid-template-columns: repeat(24, 1fr);
-          gap: 4px;
-          margin-top: 16px;
-        }
-        .heatmap-hour {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-        }
-        .heatmap-bar {
-          width: 100%;
-          border-radius: 4px;
-          min-height: 100px;
-          background: linear-gradient(to top, ${colors.info}, ${colors.info});
-          opacity: 0.6;
-          transition: opacity 0.2s;
-        }
-        .heatmap-bar:hover {
-          opacity: 1;
-        }
-        .heatmap-label {
-          font-size: 10px;
-          color: ${colors.textMuted};
-          text-align: center;
-        }
-
-        /* Collection Grid */
-        .collection-grid {
-          background: ${colors.card};
-          border: 1px solid ${colors.cardBorder};
-          border-radius: 12px;
-          padding: 24px;
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 16px;
-        }
-        .collection-item {
-          text-align: center;
-          padding: 16px;
-          border-radius: 8px;
-          background: ${isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'};
-          border: 1px solid ${colors.divider};
-        }
-        .collection-label {
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: ${colors.textMuted};
-          margin-bottom: 8px;
-          font-weight: 600;
-        }
-        .collection-value {
-          font-size: 20px;
-          font-weight: 600;
-          color: ${colors.text};
-        }
-
-        /* Loading skeleton */
-        .skeleton {
-          background: ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
-          border-radius: 8px;
-          animation: fadeIn 0.6s ease infinite alternate;
-        }
-
-        /* Theme toggle */
-        .theme-toggle {
-          position: fixed; top: 24px; right: 24px; z-index: 50;
-          width: 38px; height: 38px;
-          border-radius: 50%;
-          border: 1px solid ${colors.cardBorder};
-          background: ${isDark ? 'rgba(28,28,28,0.9)' : 'rgba(255,255,255,0.9)'};
-          backdrop-filter: blur(8px);
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          color: ${colors.textMuted};
-          transition: all 0.2s;
-          box-shadow: 0 2px 8px ${isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)'};
-        }
-        .theme-toggle:hover {
-          color: ${colors.text};
-          box-shadow: 0 4px 16px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)'};
-        }
-
-        /* Grid layout */
-        .grid-2 {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 20px;
-          margin-bottom: 28px;
-        }
-        .grid-2-full {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-bottom: 28px;
-        }
-        @media (max-width: 1024px) {
-          .grid-2-full {
-            grid-template-columns: 1fr;
-          }
-          .table-header, .table-row {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-      `}</style>
-
-      {/* Theme toggle */}
-      <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
-        {isDark ? <Sun size={15} /> : <Moon size={15} />}
-      </button>
-
-      {/* Main container */}
-      <div className="dashboard-container">
-        {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: 32,
-            fontWeight: 500,
-            color: colors.text,
-            margin: '0 0 8px',
-            letterSpacing: '-0.02em',
-          }}>
-            Dashboard
-          </h1>
-          <p style={{
-            fontSize: 14,
-            color: colors.textMuted,
-            margin: 0,
-            letterSpacing: '0.01em',
-          }}>
-            Welcome back. Here's your organization performance overview.
-          </p>
+          <button className="flex items-center gap-2 px-4 py-2 bg-bg-card border border-border-subtle rounded-lg hover:border-border-default text-text-secondary font-body text-sm transition-colors">
+            <Calendar size={16} />
+            <span>{dateRange.from} to {dateRange.to}</span>
+            <ChevronDown size={16} />
+          </button>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid-2">
-          {metricsQuery.isLoading ? (
-            Array(4).fill(0).map((_, i) => (
-              <div key={i} className="kpi-card skeleton" style={{ height: 140 }} />
-            ))
+        <div className="h-px bg-gradient-to-r from-gold/30 via-gold/15 to-transparent" />
+      </div>
+
+      {/* Block 2 — KPI Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <KPICard
+          label="Total Revenue"
+          value={
+            metricsQuery.isLoading
+              ? '—'
+              : currencyFormatter.format(metricsQuery.data?.total_revenue_month || 0)
+          }
+          icon={DollarSign}
+          accentColor="gold"
+          trend={
+            !metricsQuery.isLoading
+              ? { direction: 'up', value: 12, label: 'vs last month' }
+              : undefined
+          }
+          isLoading={metricsQuery.isLoading}
+          error={metricsQuery.isError}
+          onRetry={() => metricsQuery.refetch()}
+        />
+
+        <KPICard
+          label="Active Members"
+          value={
+            metricsQuery.isLoading ? '—' : numberFormatter.format(metricsQuery.data?.active_members || 0)
+          }
+          icon={Users}
+          accentColor="sapphire"
+          trend={
+            !metricsQuery.isLoading
+              ? { direction: 'up', value: 8, label: 'this month' }
+              : undefined
+          }
+          isLoading={metricsQuery.isLoading}
+          error={metricsQuery.isError}
+          onRetry={() => metricsQuery.refetch()}
+        />
+
+        <KPICard
+          label="New Members"
+          value={
+            metricsQuery.isLoading ? '—' : numberFormatter.format(metricsQuery.data?.new_members_month || 0)
+          }
+          icon={UserPlus}
+          accentColor="sage"
+          trend={
+            !metricsQuery.isLoading
+              ? { direction: 'up', value: 15, label: 'growth' }
+              : undefined
+          }
+          isLoading={metricsQuery.isLoading}
+          error={metricsQuery.isError}
+          onRetry={() => metricsQuery.refetch()}
+        />
+
+        <KPICard
+          label="Churn Rate"
+          value={metricsQuery.isLoading ? '—' : `${(metricsQuery.data?.churn_rate || 0).toFixed(1)}%`}
+          icon={AlertCircle}
+          accentColor={(metricsQuery.data?.churn_rate || 0) > 15 ? 'ruby' : 'amber'}
+          trend={
+            !metricsQuery.isLoading
+              ? { direction: 'down', value: 2, label: 'vs last month' }
+              : undefined
+          }
+          isLoading={metricsQuery.isLoading}
+          error={metricsQuery.isError}
+          onRetry={() => metricsQuery.refetch()}
+        />
+      </div>
+
+      {/* Block 3 — Two-column row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Payment Collections */}
+        <div className="lg:col-span-1 space-y-4">
+          <h2 className="font-display text-lg font-normal text-text-primary">Payment Collections</h2>
+
+          {collectionsQuery.isLoading ? (
+            <div className="grid grid-cols-2 gap-4">
+              {Array(4)
+                .fill(0)
+                .map((_, i) => (
+                  <SkeletonLoader key={i} height="h-20" />
+                ))}
+            </div>
+          ) : collectionsQuery.isError ? (
+            <ErrorState onRetry={() => collectionsQuery.refetch()} />
           ) : (
-            kpiCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div key={card.title} className="kpi-card">
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: 16,
-                  }}>
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.08em',
-                      color: colors.textMuted,
-                    }}>
-                      {card.title}
-                    </span>
-                    <Icon size={18} color={card.color} />
-                  </div>
-                  <div style={{
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: colors.text,
-                    letterSpacing: '-0.01em',
-                  }}>
-                    {formatValue(card.value, card.format)}
-                  </div>
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-bg-card border border-border-subtle rounded-lg p-4">
+                  <p className="text-xs uppercase tracking-widest text-text-muted font-body font-medium mb-2">
+                    Cash
+                  </p>
+                  <p className="font-display text-2xl text-text-primary">
+                    {currencyFormatter.format(collectionBreakdown.cash)}
+                  </p>
                 </div>
-              );
-            })
-          )}
-        </div>
 
-        {/* Collections and Attendance Row */}
-        <div className="grid-2-full">
-          {/* Collections */}
-          <div>
-            <h3 className="section-title">Payment Collections</h3>
-            {collectionsQuery.isLoading ? (
-              <div className="collection-grid" style={{ height: 150 }} />
-            ) : (
-              <div className="collection-grid">
-                <div className="collection-item">
-                  <div className="collection-label">Cash</div>
-                  <div className="collection-value">
-                    ₹{collectionsQuery.data?.reduce((sum, item) => sum + item.cash, 0).toLocaleString('en-IN') || 0}
+                <div className="bg-bg-card border border-border-subtle rounded-lg p-4">
+                  <p className="text-xs uppercase tracking-widest text-text-muted font-body font-medium mb-2">
+                    UPI
+                  </p>
+                  <p className="font-display text-2xl text-text-primary">
+                    {currencyFormatter.format(collectionBreakdown.upi)}
+                  </p>
+                </div>
+
+                <div className="bg-bg-card border border-border-subtle rounded-lg p-4">
+                  <p className="text-xs uppercase tracking-widest text-text-muted font-body font-medium mb-2">
+                    Card
+                  </p>
+                  <p className="font-display text-2xl text-text-primary">
+                    {currencyFormatter.format(collectionBreakdown.card)}
+                  </p>
+                </div>
+
+                <div className="bg-bg-card border border-gold/20 rounded-lg p-4">
+                  <p className="text-xs uppercase tracking-widest text-text-muted font-body font-medium mb-2">
+                    Total
+                  </p>
+                  <p className="font-display text-2xl text-gold">
+                    {currencyFormatter.format(collectionBreakdown.total)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Breakdown bar */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-muted font-body">UPI</span>
+                    <span className="text-xs font-medium text-text-secondary">
+                      {collectionBreakdown.total > 0
+                        ? Math.round((collectionBreakdown.upi / collectionBreakdown.total) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <div className="h-2 bg-bg-card-hover rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-sapphire"
+                      style={{
+                        width: `${(collectionBreakdown.upi / collectionBreakdown.total) * 100}%`,
+                      }}
+                    />
                   </div>
                 </div>
-                <div className="collection-item">
-                  <div className="collection-label">UPI</div>
-                  <div className="collection-value">
-                    ₹{collectionsQuery.data?.reduce((sum, item) => sum + item.upi, 0).toLocaleString('en-IN') || 0}
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-muted font-body">Cash</span>
+                    <span className="text-xs font-medium text-text-secondary">
+                      {collectionBreakdown.total > 0
+                        ? Math.round((collectionBreakdown.cash / collectionBreakdown.total) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <div className="h-2 bg-bg-card-hover rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-sage"
+                      style={{
+                        width: `${(collectionBreakdown.cash / collectionBreakdown.total) * 100}%`,
+                      }}
+                    />
                   </div>
                 </div>
-                <div className="collection-item">
-                  <div className="collection-label">Card</div>
-                  <div className="collection-value">
-                    ₹{collectionsQuery.data?.reduce((sum, item) => sum + item.card, 0).toLocaleString('en-IN') || 0}
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-muted font-body">Card</span>
+                    <span className="text-xs font-medium text-text-secondary">
+                      {collectionBreakdown.total > 0
+                        ? Math.round((collectionBreakdown.card / collectionBreakdown.total) * 100)
+                        : 0}
+                      %
+                    </span>
                   </div>
-                </div>
-                <div className="collection-item">
-                  <div className="collection-label">Total</div>
-                  <div className="collection-value" style={{ color: colors.success }}>
-                    ₹{totalCollections.toLocaleString('en-IN')}
+                  <div className="h-2 bg-bg-card-hover rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber"
+                      style={{
+                        width: `${(collectionBreakdown.card / collectionBreakdown.total) * 100}%`,
+                      }}
+                    />
                   </div>
                 </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
+        </div>
 
-          {/* Attendance Heatmap */}
-          <div>
-            <h3 className="section-title">Peak Hours</h3>
-            {attendanceQuery.isLoading ? (
-              <div className="heatmap-container" style={{ height: 150 }} />
-            ) : (
-              <div className="heatmap-container">
-                <div className="heatmap-hours">
-                  {attendanceQuery.data?.map((hour) => (
-                    <div key={hour.hour} className="heatmap-hour">
+        {/* Peak Hours */}
+        <div className="lg:col-span-2 space-y-4">
+          <h2 className="font-display text-lg font-normal text-text-primary">Peak Hours</h2>
+
+          {attendanceQuery.isLoading ? (
+            <div className="h-40 bg-bg-card border border-border-subtle rounded-lg" />
+          ) : attendanceQuery.isError ? (
+            <ErrorState onRetry={() => attendanceQuery.refetch()} />
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-bg-card border border-border-subtle rounded-lg p-6">
+                <div className="flex items-end justify-center gap-1 h-40">
+                  {attendanceQuery.data?.map((hour, idx) => (
+                    <div
+                      key={hour.hour}
+                      className="flex-1 flex flex-col items-center gap-2"
+                      title={`${String(hour.hour).padStart(2, '0')}:00 - ${hour.count} visits`}
+                    >
                       <div
-                        className="heatmap-bar"
+                        className={`w-full rounded-t-sm transition-all duration-200 hover:opacity-80 ${getAttendanceColor(
+                          hour.count,
+                          maxAttendance
+                        )}`}
                         style={{
-                          opacity: Math.max(0.3, (hour.count / maxAttendance) * 0.9),
+                          height: `${Math.max(4, (hour.count / maxAttendance) * 100)}%`,
                         }}
                       />
-                      <div className="heatmap-label">{String(hour.hour).padStart(2, '0')}:00</div>
+                      {/* Show labels at 12AM, 6AM, 12PM, 6PM, 11PM */}
+                      {[0, 6, 12, 18, 23].includes(hour.hour) && (
+                        <span className="text-xs text-text-muted font-body">
+                          {String(hour.hour).padStart(2, '0')}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Expiring Subscriptions */}
-        <div>
-          <h3 className="section-title">
-            <AlertCircle size={18} style={{ display: 'inline-block', marginRight: 8, verticalAlign: 'middle' }} />
-            Expiring Soon (Next 7 Days)
-          </h3>
-          {expiringQuery.isLoading ? (
-            <div className="table-container" style={{ height: 250 }} />
-          ) : expiringQuery.data && expiringQuery.data.length > 0 ? (
-            <div className="table-container">
-              <div className="table-header">
-                <div>Member</div>
-                <div>Email</div>
-                <div>Expiry Date</div>
-                <div>Days</div>
+              <div className="flex items-center gap-2 text-xs text-text-muted font-body">
+                <Clock size={14} />
+                <span>
+                  Peak hours:{' '}
+                  <span className="text-text-secondary">{peakHours || 'Loading...'}</span>
+                </span>
               </div>
-              {expiringQuery.data.map((subscription) => (
-                <div key={subscription.id} className="table-row">
-                  <div style={{ fontWeight: 500, color: colors.text }}>
-                    {subscription.member_name}
-                  </div>
-                  <div>{subscription.email}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Calendar size={14} color={colors.warning} />
-                    {new Date(subscription.expiry_date).toLocaleDateString('en-IN')}
-                  </div>
-                  <div style={{
-                    backgroundColor: subscription.days_remaining <= 3 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                    color: subscription.days_remaining <= 3 ? colors.danger : colors.warning,
-                    padding: '4px 8px',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textAlign: 'center',
-                  }}>
-                    {subscription.days_remaining}d
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="table-container" style={{
-              padding: 40,
-              textAlign: 'center',
-              color: colors.textMuted,
-            }}>
-              <p style={{ margin: 0 }}>No subscriptions expiring in the next 7 days</p>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Block 4 — Expiring Subscriptions */}
+      <div className="space-y-4">
+        <h2 className="font-display text-lg font-normal text-text-primary flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-amber animate-pulse" />
+          Expiring Subscriptions (Next 7 Days)
+        </h2>
+
+        {expiringQuery.isLoading ? (
+          <div className="bg-bg-card border border-border-subtle rounded-lg divide-y divide-border-subtle">
+            {Array(5)
+              .fill(0)
+              .map((_, i) => (
+                <div key={i} className="p-6">
+                  <SkeletonLoader />
+                </div>
+              ))}
+          </div>
+        ) : expiringQuery.isError ? (
+          <ErrorState onRetry={() => expiringQuery.refetch()} />
+        ) : expiringQuery.data && expiringQuery.data.length > 0 ? (
+          <>
+            <div className="bg-bg-card border border-border-subtle rounded-lg divide-y divide-border-subtle overflow-hidden">
+              {/* Table Header */}
+              <div className="hidden md:grid grid-cols-5 px-6 py-4 bg-bg-card-hover border-b border-border-subtle">
+                <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                  Member
+                </span>
+                <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                  Plan
+                </span>
+                <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                  Expiry Date
+                </span>
+                <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                  Gym
+                </span>
+                <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium text-right">
+                  Days Left
+                </span>
+              </div>
+
+              {/* Table Rows */}
+              {expiringQuery.data.map((subscription, idx) => {
+                const daysLeft = subscription.days_remaining;
+                const badgeColor =
+                  daysLeft <= 3 ? 'ruby' : daysLeft <= 5 ? 'amber' : 'sage';
+                const badgeClass =
+                  daysLeft <= 3
+                    ? 'bg-ruby/10 text-ruby'
+                    : daysLeft <= 5
+                      ? 'bg-amber/10 text-amber'
+                      : 'bg-sage/10 text-sage';
+
+                return (
+                  <div
+                    key={subscription.id}
+                    className="grid grid-cols-1 md:grid-cols-5 px-6 py-4 hover:bg-gold/5 transition-colors"
+                  >
+                    <div className="col-span-1 mb-4 md:mb-0">
+                      <p className="font-body font-medium text-text-primary">
+                        {subscription.member_name}
+                      </p>
+                      <p className="text-xs text-text-muted font-body">
+                        {subscription.email}
+                      </p>
+                    </div>
+
+                    <div className="col-span-1 mb-4 md:mb-0 md:hidden">
+                      <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                        Plan
+                      </span>
+                      <p className="font-body text-text-primary">{subscription.plan_name}</p>
+                    </div>
+                    <div className="col-span-1 hidden md:block">
+                      <p className="font-body text-text-primary">{subscription.plan_name}</p>
+                    </div>
+
+                    <div className="col-span-1 mb-4 md:mb-0 md:hidden">
+                      <span className="text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                        Expiry
+                      </span>
+                      <p className="font-body text-text-primary">
+                        {new Date(subscription.end_date).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="col-span-1 hidden md:block">
+                      <p className="font-body text-text-primary">
+                        {new Date(subscription.end_date).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+
+                    <div className="col-span-1 mb-4 md:mb-0">
+                      <p className="font-body text-text-secondary text-sm">Main Gym</p>
+                    </div>
+
+                    <div className="col-span-1 flex items-center justify-between md:justify-end gap-2">
+                      <span className="md:hidden text-xs uppercase tracking-widest text-text-muted font-body font-medium">
+                        Days
+                      </span>
+                      <div
+                        className={`px-3 py-1 rounded-md text-sm font-body font-medium ${badgeClass}`}
+                      >
+                        {daysLeft}d
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer action bar */}
+            <div className="flex items-center justify-between px-6 py-4 bg-bg-card border border-border-subtle rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-text-muted font-body">
+                <span className="inline-block w-2 h-2 rounded-full bg-gold animate-pulse" />
+                <span>Update renewal status on WhatsApp</span>
+              </div>
+              <a
+                href="#"
+                className="flex items-center gap-1 text-gold font-body text-sm font-medium hover:text-gold-light transition-colors"
+              >
+                Send to all <ArrowRight size={14} />
+              </a>
+            </div>
+          </>
+        ) : (
+          <div className="bg-bg-card border border-border-subtle rounded-lg p-12 text-center space-y-4">
+            <div className="flex justify-center">
+              <Clock size={32} className="text-text-muted" />
+            </div>
+            <p className="font-body text-text-secondary">
+              No subscriptions expiring in the next 7 days
+            </p>
+            <p className="font-body text-xs text-text-muted">
+              Your members' subscriptions are all in good standing.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -5,26 +5,42 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: {
-          DEFAULT: '#0f0f0d',
-          60: 'rgba(15,15,13,0.6)',
-          30: 'rgba(15,15,13,0.3)',
-          10: 'rgba(15,15,13,0.08)',
+        /* Dynamic colors tied to CSS variables */
+        bg: {
+          base: 'var(--bg-base)',
+          surface: 'var(--bg-surface)',
+          card: 'var(--bg-card)',
+          'card-hover': 'var(--bg-card-hover)',
+          input: 'var(--bg-input)',
         },
-        paper: {
-          DEFAULT: '#f5f3ee',
-          alt: '#ede9e1',
+        border: {
+          default: 'var(--border-default)',
+          subtle: 'var(--border-subtle)',
         },
+        text: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+          disabled: 'var(--text-disabled)',
+        },
+        sidebar: {
+          bg: 'var(--sidebar-bg)',
+        },
+        /* Brand tokens (constant across both themes) */
         gold: {
-          DEFAULT: '#b8935a',
-          light: '#f0e8d8',
+          DEFAULT: '#c9a96e',
+          light: '#e8d5a3',
+          dark: '#9a7845',
         },
-        rule: 'rgba(15,15,13,0.12)',
+        ruby: '#c94a4a',
+        sage: '#5a8a6a',
+        sapphire: '#4a6fa5',
+        amber: '#c97a2a',
       },
       fontFamily: {
-        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
-        mono: ['Geist Mono', 'monospace'],
-        sans: ['Instrument Sans', 'sans-serif'],
+        display: ['Cormorant Garamond', 'Georgia', 'serif'],
+        body: ['DM Sans', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       animation: {
         'fade-up': 'fadeUp 0.65s cubic-bezier(0.15, 0.9, 0.25, 1)',

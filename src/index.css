@@ -1,16 +1,73 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Dark Mode Palette */
+.dark {
+  --bg-base: #0a0908;
+  --bg-surface: #111010;
+  --bg-card: #1a1917;
+  --bg-card-hover: #242220;
+  --bg-input: #111010;
+  --border-default: rgba(201, 169, 110, 0.15);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text-primary: #f2ede4;
+  --text-secondary: #b5b2ae;
+  --text-muted: #8a8784;
+  --text-disabled: #5a5855;
+  --sidebar-bg: #0a0908;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+/* Light Mode Palette */
+.light {
+  --bg-base: #faf7f2;
+  --bg-surface: #f2ede4;
+  --bg-card: #ffffff;
+  --bg-card-hover: #faf9f7;
+  --bg-input: #ffffff;
+  --border-default: rgba(15, 15, 13, 0.12);
+  --border-subtle: rgba(15, 15, 13, 0.06);
+  --text-primary: #0f0f0d;
+  --text-secondary: #3a3835;
+  --text-muted: #6b6865;
+  --text-disabled: #aaa8a5;
+  --sidebar-bg: #f2ede4;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+/* Default to dark mode */
 :root {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  --bg-base: #0a0908;
+  --bg-surface: #111010;
+  --bg-card: #1a1917;
+  --bg-card-hover: #242220;
+  --bg-input: #111010;
+  --border-default: rgba(201, 169, 110, 0.15);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text-primary: #f2ede4;
+  --text-secondary: #b5b2ae;
+  --text-muted: #8a8784;
+  --text-disabled: #5a5855;
+  --sidebar-bg: #0a0908;
+  --font-body: 'DM Sans', sans-serif;
 }
 
 body {
   margin: 0;
+  padding: 0;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+* {
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
