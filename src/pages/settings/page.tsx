@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { BasicInfoForm } from '@/features/organization';
-import { User, Shield, Bell, CreditCard, Building, ArrowRight, AlertTriangle } from 'lucide-react';
+import { OrganizationBrandingSection } from '@/components/settings/OrganizationBrandingSection';
+import { User, Shield, Bell, CreditCard, Building, ArrowRight, AlertTriangle, MapPin } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { BranchManagementSection } from '@/components/settings/BranchManagementSection';
 
 const TABS = [
   { id: 'basic', label: 'Organization Registry', icon: Building },
@@ -12,6 +14,7 @@ const TABS = [
   { id: 'security', label: 'Security & Access', icon: Shield },
   { id: 'notifications', label: 'Communication', icon: Bell },
   { id: 'billing', label: 'Fiscal Plan', icon: CreditCard },
+  { id: 'branches', label: 'Locations & Branches', icon: MapPin },
 ];
 
 export default function SettingsPage() {
@@ -84,14 +87,24 @@ export default function SettingsPage() {
         {/* Content Workspace */}
         <main className="lg:col-span-9 space-y-8 animate-subtle-up">
           {activeTab === 'basic' && (
-            <div className="space-y-6">
-              <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
-                SYSTEM JURISDICTION
+            <div className="space-y-12">
+              <div className="space-y-6">
+                <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
+                  SYSTEM JURISDICTION
+                </div>
+                <Card>
+                  <BasicInfoForm />
+                </Card>
               </div>
-              <Card>
-                <BasicInfoForm />
-              </Card>
+              
+              <div className="h-[0.5px] w-full bg-[var(--border-default)] opacity-60" />
+              
+              <OrganizationBrandingSection />
             </div>
+          )}
+
+          {activeTab === 'branches' && (
+            <BranchManagementSection />
           )}
 
           {activeTab === 'profile' && (
@@ -155,7 +168,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {activeTab !== 'basic' && activeTab !== 'profile' && (
+          {activeTab !== 'basic' && activeTab !== 'profile' && activeTab !== 'branches' && (
             <div className="space-y-6">
               <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
                 {TABS.find(t => t.id === activeTab)?.label.toUpperCase()}

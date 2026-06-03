@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { organizationApi } from '../services/organizationApi';
 import type { OrganizationProfile } from '../types';
-import { Loader2, Save, Globe, Info, Calendar, Megaphone, Building2, Check } from 'lucide-react';
+import { Loader2, Save, Globe, Info, Calendar, Megaphone, Building2, Check, Briefcase, ShieldCheck, FileText } from 'lucide-react';
+import { FACILITY_TYPE_LABELS } from '@/features/auth/types';
 
 export const BasicInfoForm: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -38,10 +39,14 @@ export const BasicInfoForm: React.FC = () => {
       
       const payload = {
         name: profile.name,
+        business_type: profile.business_type,
         tagline: profile.tagline,
         description: profile.description,
         year_established: profile.year_established,
         website_url: profile.website_url,
+        business_id: profile.business_id,
+        gst_number: profile.gst_number,
+        pan_number: profile.pan_number,
       };
 
       await organizationApi.updateProfile(payload);
@@ -95,17 +100,35 @@ export const BasicInfoForm: React.FC = () => {
       )}
 
       <div className="grid grid-cols-1 gap-10">
-        <div className="space-y-3">
-          <label className="metadata-label flex items-center gap-3">
-             <Building2 size={12} strokeWidth={1.5} className="opacity-40" /> Organization Title
-          </label>
-          <input 
-            className="luxury-input"
-            value={profile.name}
-            onChange={e => setProfile({...profile, name: e.target.value})}
-            placeholder="Executive Fitness Club"
-            required
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="space-y-3">
+            <label className="metadata-label flex items-center gap-3">
+               <Building2 size={12} strokeWidth={1.5} className="opacity-40" /> Organization Title
+            </label>
+            <input 
+              className="luxury-input"
+              value={profile.name}
+              onChange={e => setProfile({...profile, name: e.target.value})}
+              placeholder="Executive Fitness Club"
+              required
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="metadata-label flex items-center gap-3">
+               <Briefcase size={12} strokeWidth={1.5} className="opacity-40" /> Business Type
+            </label>
+            <select 
+              className="luxury-input appearance-none bg-transparent"
+              value={profile.business_type || ''}
+              onChange={e => setProfile({...profile, business_type: e.target.value})}
+            >
+              <option value="" disabled className="bg-paper text-ink/40">Select Classification</option>
+              {Object.entries(FACILITY_TYPE_LABELS).map(([val, label]) => (
+                <option key={val} value={val} className="bg-paper text-ink">{label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -157,6 +180,53 @@ export const BasicInfoForm: React.FC = () => {
             value={profile.description || ''}
             onChange={e => setProfile({...profile, description: e.target.value})}
             placeholder="The architectural ethos and visionary goals of your wellness space..."
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4 pt-10 border-t border-ink/5">
+        <div className="metadata-label opacity-40">Section 02 / Legal & Compliance</div>
+        <h2 className="section-title">Registration Registry</h2>
+        <p className="font-sans text-sm text-ink/40 font-light max-w-lg leading-relaxed">
+          Securely manage your legal identifiers. Data is AES-256 encrypted at rest following standard security protocols.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="space-y-3">
+          <label className="metadata-label flex items-center gap-3">
+             <ShieldCheck size={12} strokeWidth={1.5} className="opacity-40" /> Business ID
+          </label>
+          <input 
+            className="luxury-input font-mono"
+            value={profile.business_id || ''}
+            onChange={e => setProfile({...profile, business_id: e.target.value})}
+            placeholder="Registration Number"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <label className="metadata-label flex items-center gap-3">
+             <FileText size={12} strokeWidth={1.5} className="opacity-40" /> GST / Tax ID
+          </label>
+          <input 
+            className="luxury-input font-mono"
+            value={profile.gst_number || ''}
+            onChange={e => setProfile({...profile, gst_number: e.target.value})}
+            placeholder="Tax Identifier"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <label className="metadata-label flex items-center gap-3">
+             <FileText size={12} strokeWidth={1.5} className="opacity-40" /> PAN Number
+          </label>
+          <input 
+            className="luxury-input font-mono uppercase"
+            value={profile.pan_number || ''}
+            onChange={e => setProfile({...profile, pan_number: e.target.value.toUpperCase()})}
+            placeholder="ABCDE1234F"
+            maxLength={10}
           />
         </div>
       </div>

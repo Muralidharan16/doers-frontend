@@ -18,6 +18,7 @@ export interface User {
   id: string;
   email: string;
   name?: string;
+  organizationName?: string;
   gym_ids?: string[];
 }
 

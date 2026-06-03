@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/services/api/client';
-import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse } from '../types';
+import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse, User } from '../types';
 
 const unwrap = <T>(payload: T | { data: T }): T => {
   if (payload && typeof payload === 'object' && 'data' in payload) {
@@ -43,7 +43,7 @@ export const authApi = {
     onboarding_completed?: boolean;
     access_token?: string;
     refresh_token?: string;
-    user?: { id: string; email: string; name: string; };
+    user?: { id: string; email: string; name: string; organizationName?: string; };
   }> => {
     const response = await apiClient.get('/auth/signup-status', { params: { email } });
     return unwrap<{ 
@@ -51,7 +51,7 @@ export const authApi = {
       onboarding_completed?: boolean;
       access_token?: string;
       refresh_token?: string;
-      user?: { id: string; email: string; name: string; };
+      user?: { id: string; email: string; name: string; organizationName?: string; };
     }>(response.data);
   },
 
@@ -72,5 +72,10 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     await apiClient.post('/auth/logout');
+  },
+
+  getMe: async (): Promise<User> => {
+    const response = await apiClient.get('/auth/me');
+    return unwrap<User>(response.data);
   },
 };

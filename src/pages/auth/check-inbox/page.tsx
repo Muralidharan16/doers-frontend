@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LoaderCircle, Mail } from 'lucide-react';
@@ -24,15 +24,31 @@ export default function CheckInboxPage() {
     return stateEmail || queryEmail || sessionStorage.getItem('signup-email') || '';
   }, [location.search, location.state]);
 
+  const [isPollingExpired, setIsPollingExpired] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsPollingExpired(true);
+    }, 10 * 60 * 1000); // 10 minutes
+    return () => clearTimeout(timer);
+  }, []);
+
   const resendMutation = useMutation({
     mutationFn: authApi.resendVerification,
+    onSuccess: () => {
+      // Reset the polling timer when resending email
+      setIsPollingExpired(false);
+    }
   });
 
   const signupStatusQuery = useQuery({
     queryKey: ['signup-status', email],
     queryFn: () => authApi.signupStatus(email),
     enabled: Boolean(email),
-    refetchInterval: (query) => query.state.data?.status === 'verified' ? false : 2500,
+    refetchInterval: (query) => {
+      if (isPollingExpired) return false;
+      return query.state.data?.status === 'verified' ? false : 2500;
+    },
     refetchIntervalInBackground: true,
   });
 
@@ -119,8 +135,14 @@ export default function CheckInboxPage() {
                 gap: '8px'
               }}
             >
-              <LoaderCircle size={14} style={{ color: 'var(--accent)' }} className="animate-spin" />
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Listening for verification...</span>
+              {!isPollingExpired ? (
+                <>
+                  <LoaderCircle size={14} style={{ color: 'var(--accent)' }} className="animate-spin" />
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Listening for verification...</span>
+                </>
+              ) : (
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Verification link expired.</span>
+              )}
             </div>
 
             <div className="w-full space-y-4 pt-2">

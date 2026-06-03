@@ -44,6 +44,7 @@ export default function SignupPage() {
 
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState<Partial<Step1Data & Step2Data & Step3Data>>({});
 
   const form1 = useForm<Step1Data>({ resolver: zodResolver(step1Schema), defaultValues: formData });
@@ -186,31 +187,41 @@ export default function SignupPage() {
             {step === 3 && (
               <form onSubmit={form3.handleSubmit(onStep3)} className="space-y-5 animate-fade-in">
                 <div className="space-y-1">
-                  <div className="relative">
-                    <Input 
-                      label="Secure Password" 
-                      type={showPassword ? 'text' : 'password'} 
-                      placeholder="••••••••" 
-                      error={form3.formState.errors.password?.message}
-                      {...form3.register('password')} 
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowPassword(!showPassword)} 
-                      className="absolute right-4 top-[38px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1"
-                      style={{ minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+                  <Input 
+                    label="Secure Password" 
+                    type={showPassword ? 'text' : 'password'} 
+                    placeholder="••••••••" 
+                    error={form3.formState.errors.password?.message}
+                    {...form3.register('password')} 
+                    rightElement={
+                      <button 
+                        type="button" 
+                        onClick={() => setShowPassword(!showPassword)} 
+                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 flex items-center justify-center"
+                        style={{ outline: 'none' }}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
+                  />
                 </div>
                 <div className="space-y-1">
                   <Input 
                     label="Confirm Password" 
-                    type="password" 
+                    type={showConfirmPassword ? 'text' : 'password'} 
                     placeholder="••••••••" 
                     error={form3.formState.errors.confirm_password?.message}
                     {...form3.register('confirm_password')} 
+                    rightElement={
+                      <button 
+                        type="button" 
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
+                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 flex items-center justify-center"
+                        style={{ outline: 'none' }}
+                      >
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
                   />
                 </div>
                 <div className="flex gap-4 mt-6">

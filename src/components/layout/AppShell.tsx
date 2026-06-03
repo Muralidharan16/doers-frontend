@@ -3,6 +3,9 @@ import { Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { useAuthStore } from '@/features/auth';
+import { useBranchStore } from '@/features/gym';
+import { BranchSelector } from './BranchSelector';
+import { authApi } from '@/features/auth/services/authApi';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -11,6 +14,25 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
+  const fetchBranches = useBranchStore((s) => s.fetchBranches);
+
+  // Fetch branches and sync user details on mount
+  useEffect(() => {
+    fetchBranches().catch(() => {});
+    
+    const syncUser = async () => {
+      try {
+        const currentUser = await authApi.getMe();
+        if (currentUser) {
+          useAuthStore.setState({ user: currentUser });
+        }
+      } catch (err) {
+        console.error('Failed to sync current user profile:', err);
+      }
+    };
+    
+    syncUser();
+  }, [fetchBranches]);
 
   const formatName = (name: string) => {
     if (!name) return '';
@@ -78,19 +100,16 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </div>
 
-          {/* Right Side: Theme Toggle & Mini Profile */}
+          {/* Right Side: Theme Toggle & Branch Selector */}
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <div className="flex items-center gap-2">
-              <div 
-                className="w-7 h-7 rounded-full flex items-center justify-center font-sans text-white text-[11px] font-medium"
-                style={{ backgroundColor: 'var(--accent)' }}
-              >
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'T'}
-              </div>
-              <span className="hidden sm:inline text-[13px] font-medium text-[var(--text-primary)]">
-                {user?.name ? formatName(user.name) : 'Studio Owner'}
-              </span>
+            <BranchSelector />
+            <div 
+              className="w-7 h-7 rounded-full flex items-center justify-center font-sans text-white text-[11px] font-medium flex-shrink-0"
+              style={{ backgroundColor: 'var(--accent)' }}
+              title={user?.name ? formatName(user.name) : 'Profile'}
+            >
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'T'}
             </div>
           </div>
         </header>
