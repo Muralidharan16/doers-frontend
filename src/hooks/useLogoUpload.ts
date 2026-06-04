@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { assetService } from '@/lib/services/assetService';
-import type { AssetStatus, LogoStatusResponse } from '@/types/assets';
+import type { LogoStatusResponse } from '@/types/assets';
 
 export type UploadState = 'idle-empty' | 'idle-has-logo' | 'uploading' | 'processing' | 'ready' | 'failed' | 'deleting';
 
@@ -24,7 +24,7 @@ export function useLogoUpload() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
 
   const clearPolling = useCallback(() => {
@@ -40,7 +40,7 @@ export function useLogoUpload() {
   }, [clearPolling]);
 
   // Centralized polling logic
-  const pollStatus = useCallback((uploadId: string) => {
+  const pollStatus = useCallback(() => {
     clearPolling();
     pollAttemptsRef.current = 0;
     setLogoState('processing');
@@ -138,7 +138,7 @@ export function useLogoUpload() {
       await assetService.confirmLogoUpload(upload_id);
 
       // Step 4: Begin polling for status
-      pollStatus(upload_id);
+      pollStatus();
     } catch (err: any) {
       setLogoState('failed');
       setError(err.message || 'Logo upload failed. Please try again.');

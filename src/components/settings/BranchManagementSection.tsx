@@ -16,6 +16,7 @@ import {
   transitionBranchStatus,
   pollTransitionStatus
 } from '@/shared/services/api/client';
+import { BranchContactsSection } from './BranchContactsSection';
 
 // The 9 fields representing our branch lifecycle schema
 const branchSchema = z.object({
@@ -56,7 +57,7 @@ export const BranchManagementSection: React.FC = () => {
   const [decommissionReason, setDecommissionReason] = useState<string>("");
   const [decommissionEffectiveDate, setDecommissionEffectiveDate] = useState<string>("");
 
-  const pollingIntervals = React.useRef<Record<string, NodeJS.Timeout>>({});
+  const pollingIntervals = React.useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Role permissions checks
   const canAddBranch = userRole === 'owner';
@@ -143,7 +144,7 @@ export const BranchManagementSection: React.FC = () => {
     defaultValues: { status: 'ACTIVE' }
   });
 
-  const startSagaPolling = (branchId: string, originalStatus: string) => {
+  const startSagaPolling = (branchId: string) => {
     if (pollingIntervals.current[branchId]) return;
 
     setTransitioningBranchIds(prev => {
@@ -184,7 +185,7 @@ export const BranchManagementSection: React.FC = () => {
     pollingIntervals.current[branchId] = interval;
   };
 
-  const executeStatusTransition = async (branchId: string, toStatus: string, reason: string, originalStatus: string) => {
+  const executeStatusTransition = async (branchId: string, toStatus: string, reason: string) => {
     setTransitioningBranchIds(prev => {
       const next = new Set(prev);
       next.add(branchId);
@@ -201,7 +202,7 @@ export const BranchManagementSection: React.FC = () => {
 
       const state = res.data?.data || res.data;
       if (state.lifecycle_transition_in_progress || state.saga_status === 'processing') {
-        startSagaPolling(branchId, originalStatus);
+        startSagaPolling(branchId);
       } else {
         await handleFetchBranches();
         setTransitioningBranchIds(prev => {
@@ -242,7 +243,7 @@ export const BranchManagementSection: React.FC = () => {
       setShowMaintenanceConfirm({ branch, newStatus });
       setMaintenanceReason("");
     } else if (targetStatus === 'ACTIVE') {
-      executeStatusTransition(branch.id, 'ACTIVE', 'Reactivating branch', oldStatus);
+      executeStatusTransition(branch.id, 'ACTIVE', 'Reactivating branch');
     }
   };
 
@@ -498,6 +499,10 @@ export const BranchManagementSection: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  
+                  <div className="mt-4">
+                    <BranchContactsSection branchId={branch.id} />
+                  </div>
                 </Card>
               );
             })}
@@ -720,8 +725,7 @@ export const BranchManagementSection: React.FC = () => {
                   executeStatusTransition(
                     showMaintenanceConfirm.branch.id,
                     'MAINTENANCE',
-                    maintenanceReason,
-                    showMaintenanceConfirm.branch.status
+                    maintenanceReason
                   );
                   setShowMaintenanceConfirm(null);
                 }}
@@ -779,8 +783,7 @@ export const BranchManagementSection: React.FC = () => {
                   executeStatusTransition(
                     showDecommissionConfirm.branch.id,
                     'DECOMMISSIONED',
-                    `${decommissionReason} (Effective: ${decommissionEffectiveDate})`,
-                    showDecommissionConfirm.branch.status
+                    `${decommissionReason} (Effective: ${decommissionEffectiveDate})`
                   );
                   setShowDecommissionConfirm(null);
                 }}

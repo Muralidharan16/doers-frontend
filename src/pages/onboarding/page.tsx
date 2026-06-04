@@ -126,6 +126,7 @@ export default function OnboardingPage() {
   const onSubmit = (data: OnboardingFormData) => {
     completeMutation.mutate({
       phone: data.phone,
+      country_code: 'IN',
       address_line1: data.address_line1,
       address_line2: data.address_line2 || undefined,
       city: data.city,
@@ -228,7 +229,7 @@ export default function OnboardingPage() {
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                 <Input
                   label="Registry Phone Line"
-                  placeholder="+00 0000 0000"
+                  placeholder="+91 9876543210"
                   error={errors.phone?.message}
                   {...register('phone')}
                 />

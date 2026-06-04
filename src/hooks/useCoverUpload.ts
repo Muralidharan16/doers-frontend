@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { assetService } from '@/lib/services/assetService';
-import type { AssetStatus, CoverStatusResponse } from '@/types/assets';
+import type { CoverStatusResponse } from '@/types/assets';
 
 export type CoverUploadState = 'idle-empty' | 'focal-picking' | 'uploading' | 'processing' | 'ready' | 'failed' | 'deleting';
 
@@ -24,7 +24,7 @@ export function useCoverUpload() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
 
   const clearPolling = useCallback(() => {
@@ -40,7 +40,7 @@ export function useCoverUpload() {
   }, [clearPolling]);
 
   // Centralized polling logic
-  const pollStatus = useCallback((uploadId: string) => {
+  const pollStatus = useCallback(() => {
     clearPolling();
     pollAttemptsRef.current = 0;
     setCoverState('processing');
@@ -145,7 +145,7 @@ export function useCoverUpload() {
       });
 
       // Step 4: Begin polling for status
-      pollStatus(upload_id);
+      pollStatus();
     } catch (err: any) {
       setCoverState('failed');
       setError(err.message || 'Cover upload failed. Please try again.');

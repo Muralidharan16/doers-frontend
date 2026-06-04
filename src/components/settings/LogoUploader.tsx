@@ -23,7 +23,7 @@ interface LogoUploaderProps {
   orgName: string;
 }
 
-export const LogoUploader: React.FC<LogoUploaderProps> = ({ orgId, orgName }) => {
+export const LogoUploader: React.FC<LogoUploaderProps> = ({ orgName }) => {
   const {
     logoState,
     logoUrls,

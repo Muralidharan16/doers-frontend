@@ -12,10 +12,10 @@
  * File upload: No existing pattern found — establish new
  */
 
-import { useState, useCallback, RefObject } from 'react';
+import { useState, useCallback, type RefObject } from 'react';
 
 export function useFocalPoint(
-  containerRef: RefObject<HTMLDivElement>
+  containerRef: RefObject<HTMLDivElement | null>
 ) {
   const [focalY, setFocalY] = useState(0.5); // Default to center
 

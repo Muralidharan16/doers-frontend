@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useBranchStore, type Gym } from '@/features/gym';
+import { useBranchStore } from '@/features/gym';
 import { Building2, ChevronDown, Check } from 'lucide-react';
 
 export function BranchSelector() {
