@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { BasicInfoForm } from '@/features/organization';
 import { OrganizationBrandingSection } from '@/components/settings/OrganizationBrandingSection';
-import { User, Shield, Bell, CreditCard, Building, ArrowRight, AlertTriangle, MapPin } from 'lucide-react';
+import { User, Shield, Bell, CreditCard, Building, ArrowRight, AlertTriangle, MapPin, Ticket } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { BranchManagementSection } from '@/components/settings/BranchManagementSection';
+import { MembershipPlansSection } from '@/components/settings/MembershipPlansSection';
 
 const TABS = [
   { id: 'basic', label: 'Organization Info', icon: Building },
-  { id: 'profile', label: 'Preferences & Theme', icon: User },
+  { id: 'branches', label: 'Locations & Branches', icon: MapPin },
+  { id: 'membership-plans', label: 'Membership Plans', icon: Ticket },
+  { id: 'billing', label: 'Plan & Billing', icon: CreditCard },
   { id: 'security', label: 'Security & Access', icon: Shield },
   { id: 'notifications', label: 'Communication', icon: Bell },
-  { id: 'billing', label: 'Plan & Billing', icon: CreditCard },
-  { id: 'branches', label: 'Locations & Branches', icon: MapPin },
+  { id: 'profile', label: 'Preferences & Theme', icon: User },
 ];
 
 export default function SettingsPage() {
@@ -107,6 +109,10 @@ export default function SettingsPage() {
             <BranchManagementSection />
           )}
 
+          {activeTab === 'membership-plans' && (
+            <MembershipPlansSection />
+          )}
+
           {activeTab === 'profile' && (
             <div className="space-y-6">
               <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
@@ -168,7 +174,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {activeTab !== 'basic' && activeTab !== 'profile' && activeTab !== 'branches' && (
+          {activeTab !== 'basic' && activeTab !== 'profile' && activeTab !== 'branches' && activeTab !== 'membership-plans' && (
             <div className="space-y-6">
               <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
                 {TABS.find(t => t.id === activeTab)?.label.toUpperCase()}
