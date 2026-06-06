@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { MapPin, Building2, Plus, Edit2, Trash2, Mail, Phone, Hash, AlertTriangle } from 'lucide-react';
+import { MapPin, Building2, Plus, Edit2, Trash2, Mail, Phone, Hash, AlertTriangle, Clock, Contact } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -17,6 +17,7 @@ import {
   pollTransitionStatus
 } from '@/shared/services/api/client';
 import { BranchContactsSection } from './BranchContactsSection';
+import { BranchOperatingHoursSection } from './BranchOperatingHoursSection';
 
 // The 9 fields representing our branch lifecycle schema
 const branchSchema = z.object({
@@ -33,8 +34,24 @@ const branchSchema = z.object({
 
 type BranchFormValues = z.infer<typeof branchSchema>;
 
+interface Branch {
+  id: string;
+  name: string;
+  internal_code?: string;
+  gymu_id?: string;
+  status: string;
+  contact_email: string;
+  contact_phone: string;
+  address_id?: string;
+  address_line1: string;
+  address_city: string;
+  address_state: string;
+  address_pincode: string;
+  total_members?: number;
+}
+
 export const BranchManagementSection: React.FC = () => {
-  const [branches, setBranches] = useState<any[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -47,12 +64,15 @@ export const BranchManagementSection: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [blockedTransitionError, setBlockedTransitionError] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<string>('owner');
+  const [userRole] = useState<string>(() => {
+    const payload = getAuthTokenPayload();
+    return payload?.role ? payload.role.toLowerCase() : 'owner';
+  });
 
   // Confirmation Modals State
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<any | null>(null);
-  const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState<any | null>(null);
-  const [showDecommissionConfirm, setShowDecommissionConfirm] = useState<any | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Branch | null>(null);
+  const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState<{ branch: Branch, newStatus: string } | null>(null);
+  const [showDecommissionConfirm, setShowDecommissionConfirm] = useState<{ branch: Branch, newStatus: string } | null>(null);
   const [maintenanceReason, setMaintenanceReason] = useState<string>("");
   const [decommissionReason, setDecommissionReason] = useState<string>("");
   const [decommissionEffectiveDate, setDecommissionEffectiveDate] = useState<string>("");
@@ -66,19 +86,20 @@ export const BranchManagementSection: React.FC = () => {
   const canTransitionToDecommissioned = userRole === 'owner';
   const canTransitionToMaintenance = userRole === 'owner' || userRole === 'manager';
 
-  const handleApiError = (err: any) => {
-    if (err.response) {
-      const status = err.response.status;
-      const detail = err.response.data?.detail;
-      const message = err.response.data?.message;
+  const handleApiError = React.useCallback((err: unknown) => {
+    const e = err as { response?: { status?: number, data?: { detail?: unknown, message?: string } }, code?: string, message?: string };
+    if (e.response) {
+      const status = e.response.status;
+      const detail = e.response.data?.detail;
+      const message = e.response.data?.message;
 
       if (status === 400 || status === 422) {
         const errors: Record<string, string> = {};
         if (Array.isArray(detail)) {
-          detail.forEach((item: any) => {
+          detail.forEach((item: { loc?: string[], msg?: string }) => {
             const field = item.loc?.[item.loc.length - 1];
             if (field) {
-              errors[field] = item.msg;
+              errors[field] = item.msg || "Invalid field";
             }
           });
           setFieldErrors(errors);
@@ -104,40 +125,38 @@ export const BranchManagementSection: React.FC = () => {
       } else {
         setFormError(detail || message || "An unexpected error occurred.");
       }
-    } else if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+    } else if (e.code === "ECONNABORTED" || e.message?.includes("timeout")) {
       setFormError("Request timed out. Check your connection and retry.");
     } else {
-      setFormError(err.message || "Something went wrong. Please try again.");
+      setFormError(e.message || "Something went wrong. Please try again.");
     }
-  };
+  }, []);
 
-  const handleFetchBranches = async () => {
-    setIsLoading(true);
+  const handleFetchBranches = React.useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     setFormError(null);
     try {
       const response = await fetchBranches();
       if (response.data?.data) {
         setBranches(response.data.data);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       handleApiError(err);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
-  };
+  }, [handleApiError]);
 
   React.useEffect(() => {
-    const payload = getAuthTokenPayload();
-    if (payload?.role) {
-      setUserRole(payload.role.toLowerCase());
-    }
-    handleFetchBranches();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    handleFetchBranches(false);
 
+    const intervals = pollingIntervals.current;
     return () => {
       // Cleanup polling intervals on unmount
-      Object.values(pollingIntervals.current).forEach(clearInterval);
+      Object.values(intervals).forEach(clearInterval);
     };
-  }, []);
+  }, [handleFetchBranches]);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<BranchFormValues>({
     resolver: zodResolver(branchSchema),
@@ -170,7 +189,7 @@ export const BranchManagementSection: React.FC = () => {
           // Saga finished successfully, refetch
           await handleFetchBranches();
         }
-      } catch (e) {
+      } catch {
         clearInterval(interval);
         delete pollingIntervals.current[branchId];
         setTransitioningBranchIds(prev => {
@@ -211,7 +230,7 @@ export const BranchManagementSection: React.FC = () => {
           return next;
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       handleApiError(err);
       await handleFetchBranches();
       setTransitioningBranchIds(prev => {
@@ -222,7 +241,7 @@ export const BranchManagementSection: React.FC = () => {
     }
   };
 
-  const handleStatusChange = (branch: any, newStatus: string) => {
+  const handleStatusChange = (branch: Branch, newStatus: string) => {
     setBlockedTransitionError(null);
     const oldStatus = branch.status.toUpperCase();
     const targetStatus = newStatus.toUpperCase();
@@ -268,7 +287,7 @@ export const BranchManagementSection: React.FC = () => {
             // NOW: calls real API PUT /gyms/{gym_id}
             await updateBranch(editingId, data);
             setFailedStep(null);
-          } catch (err: any) {
+          } catch (err: unknown) {
             setFailedStep('gym');
             handleApiError(err);
             setIsSubmitting(false);
@@ -284,7 +303,7 @@ export const BranchManagementSection: React.FC = () => {
             // NOW: calls real API PATCH /addresses/{address_id}
             await updateAddress(addressId, data);
             setFailedStep(null);
-          } catch (err: any) {
+          } catch (err: unknown) {
             setFailedStep('address');
             setFormError("Branch name saved but address update failed. Please retry address.");
             handleApiError(err);
@@ -303,7 +322,7 @@ export const BranchManagementSection: React.FC = () => {
         closeForm();
         await handleFetchBranches();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       handleApiError(err);
     } finally {
       setIsSubmitting(false);
@@ -333,7 +352,7 @@ export const BranchManagementSection: React.FC = () => {
     setIsFormOpen(true);
   };
 
-  const openEdit = (branch: any) => {
+  const openEdit = (branch: Branch) => {
     setEditingId(branch.id);
     reset({
       name: branch.name,
@@ -370,7 +389,7 @@ export const BranchManagementSection: React.FC = () => {
       // NOW: calls real API DELETE /gyms/{gym_id}
       await deleteBranch(gymId);
       await handleFetchBranches();
-    } catch (err: any) {
+    } catch (err: unknown) {
       handleApiError(err);
     } finally {
       setDeletingBranchId(null);
@@ -400,9 +419,9 @@ export const BranchManagementSection: React.FC = () => {
         <>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">Branch Registry</h2>
+              <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">Your Branches</h2>
               <p className="text-[12px] text-[var(--text-muted)] max-w-xl">
-                Manage physical locations and operational lifecycle states.
+                Manage your gym locations, contacts, and hours.
               </p>
             </div>
             {canAddBranch && (
@@ -412,75 +431,80 @@ export const BranchManagementSection: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-6">
             {branches.map(branch => {
               const isLocked = transitioningBranchIds.has(branch.id);
               return (
                 <Card
                   key={branch.id}
-                  className={`relative p-5 hover:border-[var(--accent)] transition-colors ${
+                  className={`p-0 hover:border-[var(--accent)]/60 transition-colors overflow-hidden ${
                     isLocked ? 'opacity-60 pointer-events-none' : ''
                   }`}
                 >
-                  <div className="absolute top-5 right-5 flex items-center gap-3">
-                    {canTransitionToDecommissioned || canTransitionToMaintenance ? (
-                      <select
-                        value={branch.status}
-                        disabled={isLocked}
-                        onChange={(e) => handleStatusChange(branch, e.target.value)}
-                        className="text-[12px] bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
-                      >
-                        <option value="ACTIVE">ACTIVE</option>
-                        {canTransitionToMaintenance && <option value="MAINTENANCE">MAINTENANCE</option>}
-                        {canTransitionToDecommissioned && <option value="DECOMMISSIONED">DECOMMISSIONED</option>}
-                      </select>
-                    ) : (
-                      <Badge variant={branch.status === 'ACTIVE' ? 'healthy' : 'muted'}>
-                        {branch.status}
-                      </Badge>
-                    )}
-                    <div className="flex items-center gap-1 border-l border-[var(--border-default)] pl-3">
-                      {canEditBranch && (
-                        <button
-                          onClick={() => openEdit(branch)}
-                          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md hover:bg-[var(--bg-hover)]"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                      )}
-                      {canDeleteBranch && (
-                        <button
-                          onClick={() => setShowDeleteConfirm(branch)}
-                          disabled={deletingBranchId === branch.id}
-                          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--red)] transition-colors rounded-md hover:bg-[var(--bg-hover)]"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 max-w-[85%]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-[var(--bg-hover)] border border-[var(--border-default)] flex items-center justify-center">
-                        <Building2 size={18} className="text-[var(--text-secondary)]" />
+                  {/* Branch Header */}
+                  <div className="p-5 pb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 rounded-lg bg-[var(--bg-hover)] border border-[var(--border-default)] flex items-center justify-center flex-shrink-0">
+                          <Building2 size={18} className="text-[var(--text-secondary)]" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{branch.name}</h3>
+                            {isLocked && (
+                              <span className="text-[11px] text-[var(--accent)] font-medium animate-pulse">
+                                Transition in progress...
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] mt-0.5 font-mono uppercase tracking-wider">
+                            <Hash size={10} /> {branch.gymu_id || branch.internal_code}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{branch.name}</h3>
-                          {isLocked && (
-                            <span className="text-[11px] text-[var(--accent)] font-medium animate-pulse">
-                              Transition in progress...
-                            </span>
+
+                      {/* Status & Actions — stacks below title on mobile */}
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        {canTransitionToDecommissioned || canTransitionToMaintenance ? (
+                          <select
+                            value={branch.status}
+                            disabled={isLocked}
+                            onChange={(e) => handleStatusChange(branch, e.target.value)}
+                            className="text-[12px] bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                          >
+                            <option value="ACTIVE">ACTIVE</option>
+                            {canTransitionToMaintenance && <option value="MAINTENANCE">MAINTENANCE</option>}
+                            {canTransitionToDecommissioned && <option value="DECOMMISSIONED">DECOMMISSIONED</option>}
+                          </select>
+                        ) : (
+                          <Badge variant={branch.status === 'ACTIVE' ? 'healthy' : 'muted'}>
+                            {branch.status}
+                          </Badge>
+                        )}
+                        <div className="flex items-center gap-1 border-l border-[var(--border-default)] pl-3">
+                          {canEditBranch && (
+                            <button
+                              onClick={() => openEdit(branch)}
+                              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md hover:bg-[var(--bg-hover)]"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {canDeleteBranch && (
+                            <button
+                              onClick={() => setShowDeleteConfirm(branch)}
+                              disabled={deletingBranchId === branch.id}
+                              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--red)] transition-colors rounded-md hover:bg-[var(--bg-hover)]"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] mt-0.5 font-mono uppercase tracking-wider">
-                          <Hash size={10} /> {branch.gymu_id || branch.internal_code}
-                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    {/* Address & Contact Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 mt-3 border-t border-[var(--border-default)]/50">
                       <div className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]">
                         <MapPin size={14} className="mt-0.5 text-[var(--text-muted)] flex-shrink-0" />
                         <span>
@@ -500,8 +524,24 @@ export const BranchManagementSection: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="mt-4">
-                    <BranchContactsSection branchId={branch.id} />
+                  {/* Subsections — Contacts & Operating Hours */}
+                  <div className="border-t border-[var(--border-default)]">
+                    <div className="p-5 pb-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Contact size={14} className="text-[var(--text-muted)]" />
+                        <h4 className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Contacts</h4>
+                      </div>
+                      <BranchContactsSection branchId={branch.id} />
+                    </div>
+                  </div>
+                  <div className="border-t border-[var(--border-default)]">
+                    <div className="p-5 pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock size={14} className="text-[var(--text-muted)]" />
+                        <h4 className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Operating Hours</h4>
+                      </div>
+                      <BranchOperatingHoursSection branchId={branch.id} />
+                    </div>
                   </div>
                 </Card>
               );
@@ -509,7 +549,7 @@ export const BranchManagementSection: React.FC = () => {
 
             {branches.length === 0 && (
               <div className="py-16 text-center border border-dashed border-[var(--border-default)] rounded-xl bg-[var(--bg-hover)]/50">
-                <p className="text-[13px] text-[var(--text-muted)]">No branches registered.</p>
+                <p className="text-[13px] text-[var(--text-muted)]">No branches added yet. Add your first gym location to get started.</p>
               </div>
             )}
           </div>
@@ -519,11 +559,8 @@ export const BranchManagementSection: React.FC = () => {
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-default)]">
             <div>
               <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
-                {editingId ? 'Modify Branch Configuration' : 'Initialize New Branch'}
+                {editingId ? 'Edit Branch' : 'Add New Branch'}
               </h2>
-              <p className="text-[11px] text-[var(--text-muted)] uppercase tracking-widest mt-1">
-                LIFECYCLE CONTROL PLANE
-              </p>
             </div>
             <button
               onClick={closeForm}
@@ -600,7 +637,7 @@ export const BranchManagementSection: React.FC = () => {
 
             {/* Address */}
             <div className="space-y-4 pt-2 border-t border-[var(--border-default)]">
-              <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Geographical Registry</h3>
+              <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Address</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-1.5 md:col-span-2">
                   <label className="text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">Address Line 1</label>
@@ -659,9 +696,9 @@ export const BranchManagementSection: React.FC = () => {
                 ) : failedStep ? (
                   <span>Retry {failedStep === 'gym' ? 'Name' : 'Address'}</span>
                 ) : editingId ? (
-                  <span>Apply Lifecycle Patch</span>
+                  <span>Save Changes</span>
                 ) : (
-                  <span>Initialize Branch</span>
+                  <span>Add Branch</span>
                 )}
               </Button>
             </div>
@@ -742,9 +779,9 @@ export const BranchManagementSection: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="max-w-md w-full p-6 space-y-6 animate-scale-up border-[var(--border-strong)]">
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Permanent Decommissioning</h3>
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Close Branch Permanently</h3>
               <div className="p-3 bg-[var(--red)]/10 border border-[var(--red)]/20 rounded-lg space-y-1">
-                <h4 className="text-[12px] font-bold text-[var(--red)] uppercase tracking-wider">Warning: Cascading Effects</h4>
+                <h4 className="text-[12px] font-bold text-[var(--red)] uppercase tracking-wider">Warning: This cannot be undone</h4>
                 <ul className="text-[11px] text-[var(--red)] list-disc pl-4 space-y-0.5">
                   <li>All future member bookings will be immediately cancelled.</li>
                   <li>Members registered to this home branch will be notified.</li>

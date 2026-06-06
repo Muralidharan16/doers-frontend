@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { Phone, Mail, Star, Edit2, Trash2, Plus, AlertCircle, Loader2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { 
@@ -14,6 +14,20 @@ import type {
   CreateBranchContactPayload,
   UpdateBranchContactPayload
 } from '@/features/gym/types/branchContacts';
+
+interface BranchContactFormValues {
+  contact_kind: 'phone' | 'email';
+  contact_label: string;
+  visibility_scope: string;
+  is_primary: boolean;
+  country_code: string;
+  phone_number?: string;
+  email?: string;
+  whatsapp: boolean;
+  sms: boolean;
+  voice: boolean;
+  fax: boolean;
+}
 
 interface BranchContactsSectionProps {
   branchId: string;
@@ -32,7 +46,7 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const { register, handleSubmit, watch, reset } = useForm<any>({
+  const { register, handleSubmit, reset, control } = useForm<BranchContactFormValues>({
     defaultValues: {
       contact_kind: 'phone',
       contact_label: 'Main Office',
@@ -46,23 +60,25 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     }
   });
 
-  const selectedKind = watch('contact_kind');
+  const selectedKind = useWatch({ control, name: 'contact_kind' });
 
-  const fetchContacts = useCallback(async () => {
-    setIsLoading(true);
+  const fetchContacts = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     setError(null);
     try {
       const data = await getBranchContacts(branchId);
       setContacts(data);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err.message || 'Failed to fetch contacts');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } }, message?: string };
+      setError(e?.response?.data?.detail || e?.message || 'Failed to fetch contacts');
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, [branchId]);
 
   useEffect(() => {
-    fetchContacts();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchContacts(false);
   }, [fetchContacts]);
 
   const handleOpenForm = (contact?: BranchContact) => {
@@ -107,12 +123,12 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     setFormError(null);
   };
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: BranchContactFormValues) => {
     setIsSubmitting(true);
     setFormError(null);
     
     try {
-      const payload: any = {
+      const payload: Partial<CreateBranchContactPayload> = {
         contact_kind: data.contact_kind,
         contact_label: data.contact_label,
         visibility_scope: data.visibility_scope,
@@ -140,11 +156,12 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
       
       closeForm();
       await fetchContacts();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: unknown } }, message?: string };
       setFormError(
-        err?.response?.data?.detail?.[0]?.msg || 
-        err?.response?.data?.detail || 
-        err.message || 
+        (Array.isArray(e?.response?.data?.detail) ? e.response.data.detail[0]?.msg : undefined) || 
+        (typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : null) || 
+        e?.message || 
         'Failed to save contact'
       );
     } finally {
@@ -157,8 +174,9 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     try {
       await deleteBranchContact(branchId, contactId);
       await fetchContacts();
-    } catch (err: any) {
-      alert(err?.response?.data?.detail || 'Failed to delete contact');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      alert(e?.response?.data?.detail || 'Failed to delete contact');
     }
   };
 
@@ -166,8 +184,9 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     try {
       await promoteBranchContact(branchId, contactId);
       await fetchContacts();
-    } catch (err: any) {
-      alert(err?.response?.data?.detail || 'Failed to promote contact');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      alert(e?.response?.data?.detail || 'Failed to promote contact');
     }
   };
 
@@ -189,20 +208,17 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
   }
 
   return (
-    <div className="mt-6 pt-6 border-t border-[var(--border-default)]">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">Branch Contacts</h3>
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Manage communication channels and routing</p>
-        </div>
-        <Button variant="secondary" onClick={() => handleOpenForm()} className="h-7 text-[11px] gap-1.5 px-3">
+    <div className="mt-1">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] text-[var(--text-muted)]">Phone numbers and emails for this branch</p>
+        <Button variant="secondary" onClick={() => handleOpenForm()} className="h-7 text-[11px] gap-1.5 px-3 flex-shrink-0">
           <Plus size={12} /> Add Contact
         </Button>
       </div>
 
       {safeContacts.length === 0 ? (
         <div className="py-8 text-center border border-dashed border-[var(--border-default)] rounded-lg bg-[var(--bg-hover)]/30">
-          <p className="text-[12px] text-[var(--text-muted)]">No contacts registered for this branch.</p>
+          <p className="text-[12px] text-[var(--text-muted)]">No contacts added yet. Add a phone number or email for this branch.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
