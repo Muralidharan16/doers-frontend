@@ -39,7 +39,7 @@ interface Branch {
   name: string;
   internal_code?: string;
   gymu_id?: string;
-  status: string;
+  status: 'ACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
   contact_email: string;
   contact_phone: string;
   address_id?: string;
@@ -105,9 +105,9 @@ export const BranchManagementSection: React.FC = () => {
           setFieldErrors(errors);
         } else if (typeof detail === 'string') {
           setFormError(detail);
-        } else if (detail && typeof detail === 'object' && detail.message) {
-          setFormError(detail.message);
-        } else if (message) {
+        } else if (detail && typeof detail === 'object' && 'message' in detail && typeof (detail as Record<string, unknown>).message === 'string') {
+          setFormError((detail as Record<string, unknown>).message as string);
+        } else if (typeof message === 'string') {
           setFormError(message);
         } else {
           setFormError("Validation failed. Please verify the input fields.");
@@ -119,11 +119,11 @@ export const BranchManagementSection: React.FC = () => {
       } else if (status === 404) {
         setFormError("Branch not found. Please refresh the page.");
       } else if (status === 409) {
-        setFormError(detail || message || "Conflict. A duplicate record may exist.");
+        setFormError((typeof detail === 'string' ? detail : null) || message || "Conflict. A duplicate record may exist.");
       } else if (status === 500) {
         setFormError("Something went wrong. Please try again.");
       } else {
-        setFormError(detail || message || "An unexpected error occurred.");
+        setFormError((typeof detail === 'string' ? detail : null) || message || "An unexpected error occurred.");
       }
     } else if (e.code === "ECONNABORTED" || e.message?.includes("timeout")) {
       setFormError("Request timed out. Check your connection and retry.");
@@ -149,10 +149,15 @@ export const BranchManagementSection: React.FC = () => {
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    handleFetchBranches(false);
+    handleFetchBranches();
+
+    const refreshInterval = setInterval(() => {
+      handleFetchBranches(false);
+    }, 5000);
 
     const intervals = pollingIntervals.current;
     return () => {
+      clearInterval(refreshInterval);
       // Cleanup polling intervals on unmount
       Object.values(intervals).forEach(clearInterval);
     };

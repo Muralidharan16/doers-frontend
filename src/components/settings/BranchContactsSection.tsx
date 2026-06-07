@@ -12,13 +12,14 @@ import {
 import type { 
   BranchContact, 
   CreateBranchContactPayload,
-  UpdateBranchContactPayload
+  UpdateBranchContactPayload,
+  VisibilityScope
 } from '@/features/gym/types/branchContacts';
 
 interface BranchContactFormValues {
   contact_kind: 'phone' | 'email';
   contact_label: string;
-  visibility_scope: string;
+  visibility_scope: VisibilityScope;
   is_primary: boolean;
   country_code: string;
   phone_number?: string;
