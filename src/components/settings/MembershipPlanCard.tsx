@@ -70,7 +70,11 @@ const formatValidity = (validFrom: string | null, validUntil: string | null): st
     return `Available from ${formatDate(validFrom)}`;
   }
   
-  return `Available until ${formatDate(validUntil)}`;
+  if (validUntil) {
+    return `Available until ${formatDate(validUntil)}`;
+  }
+
+  return 'Always available';
 };
 
 export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({

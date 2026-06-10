@@ -339,7 +339,7 @@ export const BranchManagementSection: React.FC = () => {
     
     const existingNumbers = branches
       .map(b => b.gymu_id || b.internal_code)
-      .filter(Boolean)
+      .filter((code): code is string => Boolean(code))
       .map(code => {
         const match = code.match(/\d+$/);
         return match ? parseInt(match[0], 10) : 0;
