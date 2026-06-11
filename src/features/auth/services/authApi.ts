@@ -10,7 +10,10 @@ const unwrap = <T>(payload: T | { data: T }): T => {
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/login', credentials);
+    const response = await apiClient.post('/auth/login', {
+      ...credentials,
+      email: credentials.email.trim().toLowerCase(),
+    });
     const data = unwrap<{
       user: AuthResponse['user'];
       access_token: string;
@@ -29,12 +32,15 @@ export const authApi = {
   },
 
   signup: async (payload: SignupPayload): Promise<{ message: string }> => {
-    const response = await apiClient.post('/auth/signup', payload);
+    const response = await apiClient.post('/auth/signup', {
+      ...payload,
+      email: payload.email.trim().toLowerCase(),
+    });
     return response.data;
   },
 
   resendVerification: async (email: string): Promise<{ message: string }> => {
-    const response = await apiClient.post('/auth/resend-verification', { email });
+    const response = await apiClient.post('/auth/resend-verification', { email: email.trim().toLowerCase() });
     return response.data;
   },
 
@@ -45,7 +51,7 @@ export const authApi = {
     refresh_token?: string;
     user?: { id: string; email: string; name: string; organizationName?: string; };
   }> => {
-    const response = await apiClient.get('/auth/signup-status', { params: { email } });
+    const response = await apiClient.get('/auth/signup-status', { params: { email: email.trim().toLowerCase() } });
     return unwrap<{ 
       status: string; 
       onboarding_completed?: boolean;

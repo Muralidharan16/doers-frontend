@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/features/auth';
 import { useBranchStore } from '@/features/gym';
 import { X, LayoutDashboard, Users, CreditCard, DollarSign, BarChart3, CalendarCheck, Building2, Settings, LogOut } from 'lucide-react';
@@ -24,6 +25,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const user = useAuthStore((s) => s.user);
   const { selectedBranch, clearBranches } = useBranchStore();
@@ -37,7 +39,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         if (isMounted && data.logo_thumb_url) {
           setLogoThumbUrl(data.logo_thumb_url);
         }
-      } catch (e) {
+      } catch {
         // Ignore
       }
     }
@@ -60,6 +62,10 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const handleLogout = () => {
     clearAuth();
     clearBranches();
+    localStorage.removeItem('auth-storage');
+    localStorage.removeItem('branch-storage');
+    sessionStorage.removeItem('signup-email');
+    queryClient.clear();
     navigate('/login', { replace: true });
     setIsOpen(false);
   };

@@ -8,9 +8,21 @@ export const apiClient = axios.create({
 });
 
 let isRefreshing = false;
-let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
 
-const processQueue = (error: any, token: string | null = null) => {
+const publicAuthRoutes = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/register',
+  '/auth/resend-verification',
+  '/auth/signup-status',
+  '/auth/refresh',
+];
+
+const isPublicAuthRoute = (url?: string): boolean =>
+  Boolean(url && publicAuthRoutes.some((route) => url.includes(route)));
+
+const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
@@ -23,6 +35,13 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // Add request interceptor to attach token
 apiClient.interceptors.request.use((config) => {
+  if (isPublicAuthRoute(config.url)) {
+    if (config.headers) {
+      delete config.headers.Authorization;
+    }
+    return config;
+  }
+
   const tokensRaw = localStorage.getItem('auth-storage');
   if (tokensRaw) {
     try {
@@ -119,7 +138,13 @@ apiClient.interceptors.response.use(
 );
 
 // Helper to decode auth token payload
-export const getAuthTokenPayload = (): any => {
+export const getAuthTokenPayload = (): {
+  org_id?: string;
+  role?: string;
+  sub?: string;
+  email?: string;
+  [key: string]: unknown;
+} | null => {
   const tokensRaw = localStorage.getItem('auth-storage');
   if (tokensRaw) {
     try {
@@ -156,7 +181,22 @@ export const fetchBranches = async () => {
   return apiClient.get('/branches');
 };
 
-export const addBranch = async (formData: any) => {
+interface BranchFormPayload {
+  name?: string;
+  internal_code?: string;
+  address_line1?: string;
+  address_line2?: string;
+  address_city?: string;
+  address_state?: string;
+  country_code?: string;
+  address_pincode?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  to_status?: string;
+  reason?: string | null;
+}
+
+export const addBranch = async (formData: BranchFormPayload) => {
   validateTenantAccess();
   const payload = {
     name: formData.name,
@@ -179,7 +219,7 @@ export const deleteBranch = async (gymId: string) => {
   return apiClient.delete(`/gyms/${gymId}`);
 };
 
-export const updateBranch = async (gymId: string, formData: any) => {
+export const updateBranch = async (gymId: string, formData: BranchFormPayload) => {
   validateTenantAccess();
   if (!gymId) throw new Error("Branch ID is required");
   const payload = {
@@ -188,7 +228,7 @@ export const updateBranch = async (gymId: string, formData: any) => {
   return apiClient.put(`/gyms/${gymId}`, payload);
 };
 
-export const updateAddress = async (addressId: string, formData: any) => {
+export const updateAddress = async (addressId: string, formData: BranchFormPayload) => {
   validateTenantAccess();
   if (!addressId) throw new Error("Address ID is required");
   const payload = {
@@ -204,11 +244,11 @@ export const updateAddress = async (addressId: string, formData: any) => {
   return apiClient.patch(`/addresses/${addressId}`, payload);
 };
 
-export const transitionBranchStatus = async (branchId: string, formData: any) => {
+export const transitionBranchStatus = async (branchId: string, formData: BranchFormPayload) => {
   validateTenantAccess();
   if (!branchId) throw new Error("Branch ID is required");
   const payload = {
-    to_status: formData.to_status.toLowerCase(), // active, maintenance, decommissioned
+    to_status: formData.to_status?.toLowerCase(), // active, maintenance, decommissioned
     reason: formData.reason || null
   };
   return apiClient.post(`/branches/${branchId}/transition`, payload);
