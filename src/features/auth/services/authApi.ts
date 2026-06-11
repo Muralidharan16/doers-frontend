@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/services/api/client';
-import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse, User } from '../types';
+import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse, SignupResponse, User } from '../types';
 
 const unwrap = <T>(payload: T | { data: T }): T => {
   if (payload && typeof payload === 'object' && 'data' in payload) {
@@ -31,7 +31,7 @@ export const authApi = {
     };
   },
 
-  signup: async (payload: SignupPayload): Promise<{ message: string }> => {
+  signup: async (payload: SignupPayload): Promise<SignupResponse> => {
     const response = await apiClient.post('/auth/signup', {
       ...payload,
       email: payload.email.trim().toLowerCase(),
@@ -44,14 +44,16 @@ export const authApi = {
     return response.data;
   },
 
-  signupStatus: async (email: string): Promise<{ 
+  signupStatus: async (email: string, pollToken: string): Promise<{ 
     status: string; 
     onboarding_completed?: boolean;
     access_token?: string;
     refresh_token?: string;
     user?: { id: string; email: string; name: string; organizationName?: string; };
   }> => {
-    const response = await apiClient.get('/auth/signup-status', { params: { email: email.trim().toLowerCase() } });
+    const response = await apiClient.get('/auth/signup-status', {
+      params: { email: email.trim().toLowerCase(), poll_token: pollToken },
+    });
     return unwrap<{ 
       status: string; 
       onboarding_completed?: boolean;

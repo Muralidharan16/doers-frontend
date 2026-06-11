@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { useSignup } from '@/features/auth';
+import type { SignupPayload } from '@/features/auth';
 import { getApiErrorMessage } from '@/shared/lib/apiError';
 import { Eye, EyeOff } from 'lucide-react';
 import { FACILITY_TYPE_LABELS } from '@/features/auth/types';
@@ -54,8 +55,27 @@ export default function SignupPage() {
   const onStep1 = (data: Step1Data) => { setFormData(p => ({ ...p, ...data })); setStep(2); };
   const onStep2 = (data: Step2Data) => { setFormData(p => ({ ...p, ...data })); setStep(3); };
   const onStep3 = (data: Step3Data) => {
-    signup({ ...formData, ...data } as any, {
-      onSuccess: () => navigate('/check-inbox', { state: { email: formData.email } }),
+    const payload = { ...formData, ...data };
+    if (
+      !payload.org_name ||
+      !payload.owner_name ||
+      !payload.email ||
+      !payload.password ||
+      !payload.facility_type
+    ) {
+      return;
+    }
+
+    signup(payload as SignupPayload, {
+      onSuccess: (result) => {
+        if (formData.email) sessionStorage.setItem('signup-email', formData.email);
+        if (result.signup_poll_token) {
+          sessionStorage.setItem('signup-poll-token', result.signup_poll_token);
+        }
+        navigate('/check-inbox', {
+          state: { email: formData.email, pollToken: result.signup_poll_token },
+        });
+      },
     });
   };
 

@@ -1,13 +1,11 @@
-import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse, User } from '../types';
+import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse, SignupResponse, User } from '../types';
 export declare const authApi: {
     login: (credentials: LoginCredentials) => Promise<AuthResponse>;
-    signup: (payload: SignupPayload) => Promise<{
-        message: string;
-    }>;
+    signup: (payload: SignupPayload) => Promise<SignupResponse>;
     resendVerification: (email: string) => Promise<{
         message: string;
     }>;
-    signupStatus: (email: string) => Promise<{
+    signupStatus: (email: string, pollToken: string) => Promise<{
         status: string;
         onboarding_completed?: boolean;
         access_token?: string;

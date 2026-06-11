@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useTrialLockStore, type TrialLockCode } from '@/features/trial/store/trialLockStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
@@ -112,10 +113,24 @@ apiClient.interceptors.response.use(
         const newAccessToken = data?.data?.access_token || data?.access_token;
         const newRefreshToken = data?.data?.refresh_token || data?.refresh_token;
 
-        if (parsed?.state?.tokens) {
-          parsed.state.tokens.access_token = newAccessToken;
-          parsed.state.tokens.refresh_token = newRefreshToken;
-          localStorage.setItem('auth-storage', JSON.stringify(parsed));
+        if (!newAccessToken || !newRefreshToken) {
+          throw new Error('Refresh response missing tokens');
+        }
+
+        if (newAccessToken && newRefreshToken) {
+          if (parsed?.state?.tokens) {
+            parsed.state.tokens.access_token = newAccessToken;
+            parsed.state.tokens.refresh_token = newRefreshToken;
+            localStorage.setItem('auth-storage', JSON.stringify(parsed));
+          } else if (parsed?.tokens) {
+            parsed.tokens.access_token = newAccessToken;
+            parsed.tokens.refresh_token = newRefreshToken;
+            localStorage.setItem('auth-storage', JSON.stringify(parsed));
+          }
+          useAuthStore.getState().updateTokens({
+            access_token: newAccessToken,
+            refresh_token: newRefreshToken,
+          }, data?.onboarding_completed);
         }
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
@@ -123,7 +138,11 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
+        useAuthStore.getState().clearAuth();
         localStorage.removeItem('auth-storage');
+        localStorage.removeItem('branch-storage');
+        sessionStorage.removeItem('signup-email');
+        sessionStorage.removeItem('signup-poll-token');
         if (window.location.pathname !== '/login') {
           window.location.assign('/login');
         }

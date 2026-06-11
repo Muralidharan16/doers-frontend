@@ -11,6 +11,11 @@ export interface AuthResponse {
     tokens: AuthTokens;
     onboarding_completed: boolean;
 }
+export interface SignupResponse {
+    status: string;
+    message: string;
+    signup_poll_token?: string;
+}
 export interface User {
     id: string;
     email: string;

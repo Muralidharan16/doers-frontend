@@ -65,6 +65,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     localStorage.removeItem('auth-storage');
     localStorage.removeItem('branch-storage');
     sessionStorage.removeItem('signup-email');
+    sessionStorage.removeItem('signup-poll-token');
     queryClient.clear();
     navigate('/login', { replace: true });
     setIsOpen(false);
