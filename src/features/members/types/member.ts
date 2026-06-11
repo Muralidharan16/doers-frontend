@@ -27,12 +27,12 @@ export interface Member {
 export interface CreateMemberPayload {
   name: string;
   phone: string;
-  home_branch_id?: string | null;
+  home_branch_id: string;
   email?: string | null;
-  date_of_birth?: string | null;
+  date_of_birth: string;
   gender?: string | null;
   blood_group?: string | null;
-  emergency_contact_name?: string | null;
+  emergency_contact_name: string;
   emergency_contact_phone?: string | null;
   address?: string | null;
   height_cm?: number | null;

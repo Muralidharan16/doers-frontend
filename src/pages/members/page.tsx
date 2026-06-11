@@ -19,10 +19,23 @@ import type {
   UpdateMemberPayload,
 } from '@/features/members';
 import { getApiErrorMessage } from '@/shared/lib/apiError';
-import { getAuthTokenPayload } from '@/shared/services/api/client';
+import { fetchBranches, getAuthTokenPayload } from '@/shared/services/api/client';
 
 type StatusFilter = 'all' | MemberStatus;
 type FormMode = 'create' | 'edit';
+
+interface BranchOption {
+  id: string;
+  name: string;
+  city?: string | null;
+}
+
+interface ApiBranch {
+  id?: unknown;
+  name?: unknown;
+  internal_code?: unknown;
+  address_city?: unknown;
+}
 
 interface MemberFormState {
   name: string;
@@ -55,6 +68,7 @@ const emptyFormState: MemberFormState = {
 };
 
 const memberStatuses: MemberStatus[] = ['active', 'inactive', 'frozen', 'expired', 'blocked'];
+const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const getCurrentOrgId = (): string | undefined => {
   const payload = getAuthTokenPayload();
@@ -89,6 +103,46 @@ const getStatusBadgeVariant = (status: MemberStatus): 'healthy' | 'warning' | 'm
   return 'muted';
 };
 
+const getBranchLabel = (
+  branchId: string | null | undefined,
+  branches: BranchOption[]
+): string => {
+  if (!branchId) return 'No home branch';
+  return branches.find((branch) => branch.id === branchId)?.name ?? branchId;
+};
+
+const normalizeBranchOption = (branch: ApiBranch): BranchOption | null => {
+  if (typeof branch.id !== 'string' || !branch.id) return null;
+  const name = typeof branch.name === 'string' && branch.name.trim()
+    ? branch.name.trim()
+    : typeof branch.internal_code === 'string' && branch.internal_code.trim()
+      ? branch.internal_code.trim()
+      : 'Unnamed branch';
+
+  return {
+    id: branch.id,
+    name,
+    city: typeof branch.address_city === 'string' ? branch.address_city : null,
+  };
+};
+
+const normalizeIndianPhone = (value: string): string | null => {
+  const cleaned = value.trim().replace(/[\s\-()]/g, '').replace(/^\+?91/, '').replace(/^0+/, '');
+  return /^[6-9]\d{9}$/.test(cleaned) ? cleaned : null;
+};
+
+const getAge = (dateString: string): number | null => {
+  const dob = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDelta = today.getMonth() - dob.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+  return age;
+};
+
 const getMemberFormState = (member?: Member): MemberFormState => {
   if (!member) return emptyFormState;
   return {
@@ -120,12 +174,12 @@ const nullableValue = (value: string): string | null => {
 const buildCreatePayload = (form: MemberFormState): CreateMemberPayload => ({
   name: form.name.trim(),
   phone: form.phone.trim(),
-  home_branch_id: nullableValue(form.home_branch_id),
+  home_branch_id: form.home_branch_id.trim(),
   email: nullableValue(form.email),
-  date_of_birth: nullableValue(form.date_of_birth),
+  date_of_birth: form.date_of_birth,
   gender: nullableValue(form.gender),
   blood_group: nullableValue(form.blood_group),
-  emergency_contact_name: nullableValue(form.emergency_contact_name),
+  emergency_contact_name: form.emergency_contact_name.trim(),
   emergency_contact_phone: nullableValue(form.emergency_contact_phone),
   address: nullableValue(form.address),
   notes: nullableValue(form.notes),
@@ -148,6 +202,9 @@ const buildUpdatePayload = (form: MemberFormState): UpdateMemberPayload => ({
 
 export default function MembersPage() {
   const orgId = getCurrentOrgId();
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(Boolean(orgId));
+  const [branchesError, setBranchesError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -157,6 +214,31 @@ export default function MembersPage() {
   const [form, setForm] = useState<MemberFormState>(emptyFormState);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgId) return;
+
+    let isMounted = true;
+
+    fetchBranches()
+      .then((response) => {
+        if (!isMounted) return;
+        const rawBranches: ApiBranch[] = Array.isArray(response.data?.data) ? response.data.data : [];
+        setBranches(rawBranches.map(normalizeBranchOption).filter((branch): branch is BranchOption => Boolean(branch)));
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setBranches([]);
+        setBranchesError(getApiErrorMessage(error, 'Unable to load branches.'));
+      })
+      .finally(() => {
+        if (isMounted) setBranchesLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orgId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -190,7 +272,10 @@ export default function MembersPage() {
   const openCreateForm = () => {
     setFormMode('create');
     setEditingMember(null);
-    setForm(emptyFormState);
+    setForm({
+      ...emptyFormState,
+      home_branch_id: '',
+    });
     setFormError(null);
     setSuccessMessage(null);
     setIsFormOpen(true);
@@ -215,12 +300,37 @@ export default function MembersPage() {
 
   const validateForm = (): string | null => {
     if (!form.name.trim()) return 'Member name is required.';
+    if (form.name.trim().length < 2) return 'Member name must be at least 2 characters.';
     if (!form.phone.trim()) return 'Phone number is required.';
+    if (!normalizeIndianPhone(form.phone)) return 'Enter a valid 10-digit Indian mobile number.';
+    if (!form.date_of_birth) return 'Date of birth is required.';
+    const age = getAge(form.date_of_birth);
+    if (age === null) return 'Enter a valid date of birth.';
+    if (age < 3) return 'Member must be at least 3 years old.';
+    if (age > 120) return 'Member age cannot exceed 120 years.';
+    if (!form.emergency_contact_name.trim()) return 'Emergency Contact No. 1 is required.';
+    if (!normalizeIndianPhone(form.emergency_contact_name)) {
+      return 'Enter a valid Emergency Contact No. 1 mobile number.';
+    }
+    if (form.emergency_contact_phone.trim() && !normalizeIndianPhone(form.emergency_contact_phone)) {
+      return 'Enter a valid Emergency Contact No. 2 mobile number.';
+    }
+    if (!form.home_branch_id) return 'Home branch is required.';
+    if (!branches.some((branch) => branch.id === form.home_branch_id)) return 'Select a valid home branch.';
+    if (form.blood_group && !bloodGroups.includes(form.blood_group)) return 'Select a valid blood group.';
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       return 'Enter a valid email address.';
     }
     return null;
   };
+
+  const branchSelectHelp = branchesError
+    ? branchesError
+    : branchesLoading
+      ? 'Loading branches...'
+      : branches.length === 0
+        ? 'No active branches available.'
+        : null;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -423,7 +533,7 @@ export default function MembersPage() {
                     </td>
                     <td className="py-3.5 px-6 font-medium">{member.phone}</td>
                     <td className="py-3.5 px-6 text-[var(--text-secondary)]">
-                      {member.home_branch_id || 'No home branch'}
+                      {getBranchLabel(member.home_branch_id, branches)}
                     </td>
                     <td className="py-3.5 px-6 text-center">
                       <Badge variant={getStatusBadgeVariant(member.status)}>
@@ -487,7 +597,9 @@ export default function MembersPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Home Branch</span>
-                    <span className="font-medium text-[var(--text-primary)] break-all">{member.home_branch_id || 'No home branch'}</span>
+                    <span className="font-medium text-[var(--text-primary)] break-all">
+                      {getBranchLabel(member.home_branch_id, branches)}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Joined</span>
@@ -498,7 +610,7 @@ export default function MembersPage() {
                 {(member.blood_group || member.emergency_contact_name || member.notes) && (
                   <div className="text-[11px] text-[var(--text-muted)]">
                     {member.blood_group && <span>Blood group {member.blood_group}. </span>}
-                    {member.emergency_contact_name && <span>Emergency: {member.emergency_contact_name}. </span>}
+                    {member.emergency_contact_name && <span>Emergency Contact No. 1: {member.emergency_contact_name}. </span>}
                     {member.notes && <span>Notes added.</span>}
                   </div>
                 )}
@@ -580,13 +692,30 @@ export default function MembersPage() {
                   type="date"
                   value={form.date_of_birth}
                   onChange={(event) => setForm((current) => ({ ...current, date_of_birth: event.target.value }))}
+                  required
                 />
-                <Input
-                  label="Home branch ID"
-                  value={form.home_branch_id}
-                  onChange={(event) => setForm((current) => ({ ...current, home_branch_id: event.target.value }))}
-                  placeholder="Optional branch UUID"
-                />
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] tracking-[0.08em] text-[var(--text-muted)] uppercase font-semibold">
+                    Home Branch
+                  </label>
+                  <select
+                    value={form.home_branch_id}
+                    onChange={(event) => setForm((current) => ({ ...current, home_branch_id: event.target.value }))}
+                    required
+                    disabled={branchesLoading || branches.length === 0}
+                    className="bg-[var(--bg-input)] border border-[var(--border-default)] rounded-[var(--radius-md)] px-3 py-2.5 text-[16px] md:text-[14px] text-[var(--text-primary)] disabled:opacity-60"
+                  >
+                    <option value="">{branchesLoading ? 'Loading branches...' : 'Select home branch'}</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.city ? `${branch.name} - ${branch.city}` : branch.name}
+                      </option>
+                    ))}
+                  </select>
+                  {branchSelectHelp && (
+                    <span className="text-[11px] text-[var(--text-muted)]">{branchSelectHelp}</span>
+                  )}
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] tracking-[0.08em] text-[var(--text-muted)] uppercase font-semibold">
                     Gender
@@ -602,11 +731,23 @@ export default function MembersPage() {
                     <option value="other">Other</option>
                   </select>
                 </div>
-                <Input
-                  label="Blood group"
-                  value={form.blood_group}
-                  onChange={(event) => setForm((current) => ({ ...current, blood_group: event.target.value }))}
-                />
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] tracking-[0.08em] text-[var(--text-muted)] uppercase font-semibold">
+                    Blood Group
+                  </label>
+                  <select
+                    value={form.blood_group}
+                    onChange={(event) => setForm((current) => ({ ...current, blood_group: event.target.value }))}
+                    className="bg-[var(--bg-input)] border border-[var(--border-default)] rounded-[var(--radius-md)] px-3 py-2.5 text-[16px] md:text-[14px] text-[var(--text-primary)]"
+                  >
+                    <option value="">Not set</option>
+                    {bloodGroups.map((bloodGroup) => (
+                      <option key={bloodGroup} value={bloodGroup}>
+                        {bloodGroup}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 {formMode === 'edit' && (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] tracking-[0.08em] text-[var(--text-muted)] uppercase font-semibold">
@@ -628,12 +769,13 @@ export default function MembersPage() {
                   </div>
                 )}
                 <Input
-                  label="Emergency contact"
+                  label="Emergency Contact No. 1"
                   value={form.emergency_contact_name}
                   onChange={(event) => setForm((current) => ({ ...current, emergency_contact_name: event.target.value }))}
+                  required
                 />
                 <Input
-                  label="Emergency phone"
+                  label="Emergency Contact No. 2"
                   value={form.emergency_contact_phone}
                   onChange={(event) => setForm((current) => ({ ...current, emergency_contact_phone: event.target.value }))}
                 />
