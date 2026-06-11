@@ -1,249 +1,663 @@
-import { useState } from 'react';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Plus, Check, MoreHorizontal, AlertCircle } from 'lucide-react';
+import { useBranchStore } from '@/features/gym';
+import { useMembershipPlans } from '@/features/gym/hooks/useMembershipPlans';
+import type { MembershipPlan } from '@/features/gym/types/membershipPlans';
+import { useMembers } from '@/features/members';
+import type { Member } from '@/features/members';
+import { useCreateSubscription, useSubscriptions } from '@/features/subscriptions';
+import type { CreateSubscriptionPayload, MemberSubscriptionV2, ModernSubscriptionStatus } from '@/features/subscriptions';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
+import { getAuthTokenPayload } from '@/shared/services/api/client';
 
-const MOCK_PLANS = [
-  { 
-    id: '1', 
-    name: 'Studio Gold Annual', 
-    price: '₹12,500', 
-    period: 'year',
-    activeSubscribers: 48,
-    features: ['Unlimited open gym access', '12 curated coach sessions/yr', 'Priority studio reservations', 'Locker & towel privileges'],
-    isActive: true 
-  },
-  { 
-    id: '2', 
-    name: 'Studio Premium Monthly', 
-    price: '₹1,800', 
-    period: 'month',
-    activeSubscribers: 114,
-    features: ['Full studio access', '2 coach check-ins/mo', 'Standard reservation window', 'Digital progress metrics'],
-    isActive: false 
+interface AdmissionFormState {
+  primary_member_id: string;
+  branch_id: string;
+  membership_plan_id: string;
+  start_date: string;
+}
+
+const todayIso = (): string => new Date().toISOString().slice(0, 10);
+
+const emptyFormState = (): AdmissionFormState => ({
+  primary_member_id: '',
+  branch_id: '',
+  membership_plan_id: '',
+  start_date: todayIso(),
+});
+
+const getCurrentOrgId = (): string | undefined => {
+  const payload = getAuthTokenPayload();
+  return typeof payload?.org_id === 'string' ? payload.org_id : undefined;
+};
+
+const titleCase = (value: string): string =>
+  value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatDate = (dateString?: string | null): string => {
+  if (!dateString) return 'Not available';
+  const date = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const formatMoney = (amount: number, currencyCode?: string): string =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: currencyCode || 'INR',
+    maximumFractionDigits: 2,
+  }).format(amount);
+
+const formatDuration = (value: number, unit: string): string => {
+  const singularUnit = value === 1 ? unit.replace(/s$/, '') : unit;
+  return `${value} ${singularUnit}`;
+};
+
+const getStatusBadgeVariant = (status: ModernSubscriptionStatus): 'healthy' | 'warning' | 'muted' | 'gold' => {
+  if (status === 'active') return 'healthy';
+  if (status === 'pending' || status === 'frozen') return 'gold';
+  if (status === 'cancelled' || status === 'expired') return 'warning';
+  return 'muted';
+};
+
+const addDuration = (startDate: string, value: number, unit: MembershipPlan['duration_unit']): string | null => {
+  if (!startDate || value <= 0) return null;
+  const [year, month, day] = startDate.split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+
+  if (unit === 'days') {
+    date.setDate(date.getDate() + value);
+  } else if (unit === 'months') {
+    date.setMonth(date.getMonth() + value);
+  } else {
+    date.setFullYear(date.getFullYear() + value);
   }
-];
 
-const MOCK_SUBSCRIBERS = [
-  { id: '1', member: 'Devon Lane', plan: 'Studio Gold Annual', status: 'active', amount: '₹12,500', nextBilling: '12 Jan 2027' },
-  { id: '2', member: 'Kathryn Murphy', plan: 'Studio Premium Monthly', status: 'active', amount: '₹1,800', nextBilling: '04 Jun 2026' },
-  { id: '3', member: 'Albert Flores', plan: 'Studio Gold Annual', status: 'paused', amount: '₹12,500', nextBilling: '19 Jun 2026' },
-  { id: '4', member: 'Eleanor Pena', plan: 'Studio Premium Monthly', status: 'cancelled', amount: '₹1,800', nextBilling: 'Ended' },
-  { id: '5', member: 'Jenny Wilson', plan: 'Studio Premium Monthly', status: 'trial', amount: '₹0', nextBilling: '22 May 2026' },
-];
+  return date.toISOString().slice(0, 10);
+};
+
+const getLastValidDay = (endDate: string | null): string | null => {
+  if (!endDate) return null;
+  const date = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().slice(0, 10);
+};
+
+const isPlanAvailableForBranch = (plan: MembershipPlan, branchId: string): boolean =>
+  plan.status === 'active' && (!plan.branch_id || plan.branch_id === branchId);
+
+const buildCreatePayload = (form: AdmissionFormState): CreateSubscriptionPayload => ({
+  branch_id: form.branch_id,
+  membership_plan_id: form.membership_plan_id,
+  primary_member_id: form.primary_member_id,
+  start_date: form.start_date || null,
+});
 
 export default function SubscriptionsPage() {
-  const [plans, setPlans] = useState(MOCK_PLANS);
-  const subscribers = MOCK_SUBSCRIBERS;
+  const orgId = getCurrentOrgId();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [form, setForm] = useState<AdmissionFormState>(emptyFormState);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge variant="healthy">Active</Badge>;
-      case 'paused':
-        return <Badge variant="gold">Paused</Badge>;
-      case 'cancelled':
-        return <Badge variant="warning">Cancelled</Badge>;
-      case 'trial':
-        return (
-          <div 
-            style={{ 
-              border: '0.5px solid #4A90E2', 
-              color: '#4A90E2',
-              fontSize: '10px',
-              letterSpacing: '0.1em',
-              padding: '3px 10px',
-              borderRadius: '3px',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-              display: 'inline-flex'
-            }}
-          >
-            Trial
-          </div>
-        );
-      default:
-        return <Badge variant="muted">Inactive</Badge>;
+  const branches = useBranchStore((state) => state.branches);
+  const branchesLoading = useBranchStore((state) => state.isLoading);
+  const branchError = useBranchStore((state) => state.error);
+  const fetchBranches = useBranchStore((state) => state.fetchBranches);
+
+  useEffect(() => {
+    if (!orgId || branches.length > 0 || branchesLoading) return;
+    fetchBranches().catch(() => {});
+  }, [branches.length, branchesLoading, fetchBranches, orgId]);
+
+  const membersQuery = useMembers(orgId, { status: 'active', is_active: true, limit: 50 });
+  const plansQuery = useMembershipPlans({ plan_status: 'active' }, { enabled: !!orgId });
+  const subscriptionsQuery = useSubscriptions(orgId, { page: 1, limit: 50 });
+  const createSubscription = useCreateSubscription(orgId);
+
+  const activeMembers = useMemo(
+    () => (membersQuery.data?.data ?? []).filter((member) => member.status === 'active' && member.is_active),
+    [membersQuery.data?.data]
+  );
+
+  const activePlans = useMemo(
+    () => (plansQuery.data ?? []).filter((plan) => plan.status === 'active' && plan.org_id === orgId),
+    [orgId, plansQuery.data]
+  );
+
+  const subscriptions = subscriptionsQuery.data?.data ?? [];
+
+  const memberById = useMemo(() => new Map(activeMembers.map((member) => [member.id, member])), [activeMembers]);
+  const planById = useMemo(() => new Map(activePlans.map((plan) => [plan.id, plan])), [activePlans]);
+  const branchById = useMemo(() => new Map(branches.map((branch) => [branch.id, branch])), [branches]);
+
+  const availablePlans = useMemo(() => {
+    if (!form.branch_id) return activePlans;
+    return activePlans.filter((plan) => isPlanAvailableForBranch(plan, form.branch_id));
+  }, [activePlans, form.branch_id]);
+
+  const selectedPlan = form.membership_plan_id ? planById.get(form.membership_plan_id) : undefined;
+  const previewEndDate = selectedPlan
+    ? addDuration(form.start_date, selectedPlan.duration_value, selectedPlan.duration_unit)
+    : null;
+  const previewLastValidDay = getLastValidDay(previewEndDate);
+
+  const activeSubscriptionCount = subscriptions.filter((subscription) => subscription.status === 'active').length;
+  const totalActiveSlots = subscriptions.reduce(
+    (count, subscription) => count + (subscription.members?.filter((member) => member.is_active).length ?? 0),
+    0
+  );
+
+  const openForm = () => {
+    setForm(emptyFormState());
+    setFormError(null);
+    setSuccessMessage(null);
+    setIsFormOpen(true);
+  };
+
+  const closeForm = () => {
+    if (createSubscription.isPending) return;
+    setIsFormOpen(false);
+    setForm(emptyFormState());
+    setFormError(null);
+  };
+
+  const validateForm = (): string | null => {
+    if (!form.primary_member_id) return 'Select an active member before admission.';
+    if (!form.branch_id) return 'Select a branch before admission.';
+    if (!form.membership_plan_id) return 'Select an active membership plan.';
+    if (!form.start_date) return 'Select a start date.';
+    const plan = planById.get(form.membership_plan_id);
+    if (!plan || !isPlanAvailableForBranch(plan, form.branch_id)) {
+      return 'This membership plan is not available for the selected branch.';
+    }
+    return null;
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError(null);
+    setSuccessMessage(null);
+
+    const validationError = validateForm();
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    try {
+      const subscription = await createSubscription.mutateAsync(buildCreatePayload(form));
+      setSuccessMessage(`Subscription ${subscription.subscription_code} created successfully.`);
+      closeForm();
+    } catch (error) {
+      setFormError(getApiErrorMessage(error, 'Unable to create subscription. Please try again.'));
     }
   };
 
-  const handleCreatePlan = () => {
-    const name = prompt("Enter new plan title:");
-    if (!name) return;
-    const price = prompt("Enter plan price (e.g. ₹2,500):");
-    if (!price) return;
-    
-    const newPlan = {
-      id: String(plans.length + 1),
-      name,
-      price,
-      period: 'month',
-      activeSubscribers: 0,
-      features: ['Standard entry permissions', 'Platform metrics tracking'],
-      isActive: false
-    };
-    setPlans([...plans, newPlan]);
+  const handleBranchChange = (branchId: string) => {
+    setForm((current) => {
+      const plan = current.membership_plan_id ? planById.get(current.membership_plan_id) : undefined;
+      const shouldClearPlan = plan && branchId && !isPlanAvailableForBranch(plan, branchId);
+      return {
+        ...current,
+        branch_id: branchId,
+        membership_plan_id: shouldClearPlan ? '' : current.membership_plan_id,
+      };
+    });
   };
+
+  const isLoading = membersQuery.isLoading || plansQuery.isLoading || subscriptionsQuery.isLoading || branchesLoading;
+  const missingSetupMessage = (() => {
+    if (!membersQuery.isLoading && activeMembers.length === 0) return 'Create a member before admission.';
+    if (!branchesLoading && branches.length === 0) return 'Create a branch before admission.';
+    if (!plansQuery.isLoading && activePlans.length === 0) return 'Create an active membership plan before admission.';
+    return null;
+  })();
+
+  if (!orgId) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <PageHeader title="Admissions & Subscriptions" category="Management" />
+        <Card className="flex items-center gap-3 text-[13px] text-[var(--red)]">
+          <AlertTriangle size={18} />
+          <span>Organization context not available. Please sign in again.</span>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <PageHeader 
-        title="Plans & Subscriptions" 
-        category="Finance" 
+      <PageHeader
+        title="Admissions & Subscriptions"
+        category="Management"
         action={
-          <Button variant="primary" onClick={handleCreatePlan} className="gap-2">
+          <Button variant="primary" onClick={openForm} className="gap-2" disabled={!!missingSetupMessage}>
             <Plus size={14} />
-            <span>New Plan</span>
+            <span>Admit Member</span>
           </Button>
         }
       />
 
-      {/* Renewal alerts banner */}
-      <div 
-        style={{ 
-          backgroundColor: 'var(--accent-subtle)', 
-          borderLeft: '3px solid var(--accent)', 
-          borderRadius: '0 var(--radius-md) var(--radius-md) 0',
-          padding: '12px 18px',
-        }}
-        className="flex items-center gap-3"
-      >
-        <AlertCircle size={16} className="text-[var(--accent)]" />
-        <span className="text-[13px] font-medium text-[var(--accent-text)]">
-          4 subscriptions renewing in the next 7 days. Ensure payment gateways are active.
-        </span>
+      {successMessage && (
+        <div className="p-3 rounded-md border border-[var(--green)]/30 text-[13px] text-[var(--green)] bg-[var(--green)]/10">
+          {successMessage}
+        </div>
+      )}
+
+      {missingSetupMessage && (
+        <Card className="flex items-center gap-3 text-[13px] text-[var(--text-secondary)]">
+          <AlertTriangle size={18} className="text-[var(--accent)]" />
+          <span>{missingSetupMessage}</span>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="flex flex-col justify-between py-5 px-6">
+          <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">
+            Subscriptions
+          </div>
+          <div className="text-[32px] font-light text-[var(--text-primary)] mt-2 leading-none">
+            {subscriptionsQuery.data?.total ?? 0}
+          </div>
+          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-normal">Loaded from backend</div>
+        </Card>
+
+        <Card className="flex flex-col justify-between py-5 px-6">
+          <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">Active</div>
+          <div className="text-[32px] font-light text-[var(--green)] mt-2 leading-none">{activeSubscriptionCount}</div>
+          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-normal">Current active records</div>
+        </Card>
+
+        <Card className="flex flex-col justify-between py-5 px-6">
+          <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">
+            Active Members
+          </div>
+          <div className="text-[32px] font-light text-[var(--accent)] mt-2 leading-none">{activeMembers.length}</div>
+          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-normal">Available for admission</div>
+        </Card>
+
+        <Card className="flex flex-col justify-between py-5 px-6">
+          <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">Slots</div>
+          <div className="text-[32px] font-light text-[var(--text-secondary)] mt-2 leading-none">{totalActiveSlots}</div>
+          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-normal">Active primary slots loaded</div>
+        </Card>
       </div>
 
-      {/* Plans Grid */}
-      <div className="space-y-4">
-        <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
-          ACTIVE SERVICE TIERS
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {plans.map((plan) => (
-            <Card 
-              key={plan.id}
-              style={{
-                border: plan.isActive ? '0.5px solid var(--accent)' : '0.5px solid var(--border-default)'
-              }}
-              className="relative flex flex-col justify-between"
-            >
-              {/* Active badge in top right */}
-              <div className="absolute top-4 right-4 flex items-center gap-2">
-                <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase">
-                  {plan.activeSubscribers} SUBSCRIBERS
-                </span>
-                {plan.isActive && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+      {(membersQuery.error || plansQuery.error || subscriptionsQuery.error || branchError) && (
+        <Card className="flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-[var(--red)] mt-0.5" />
+            <div className="space-y-1">
+              <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">Some subscription data could not load</h3>
+              <p className="text-[12px] text-[var(--text-muted)]">
+                {getApiErrorMessage(
+                  membersQuery.error ?? plansQuery.error ?? subscriptionsQuery.error,
+                  branchError || 'Refresh the data and try again.'
                 )}
-              </div>
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => membersQuery.refetch()}>
+              <RefreshCw size={14} />
+              Members
+            </Button>
+            <Button variant="secondary" onClick={() => plansQuery.refetch()}>
+              <RefreshCw size={14} />
+              Plans
+            </Button>
+            <Button variant="secondary" onClick={() => subscriptionsQuery.refetch()}>
+              <RefreshCw size={14} />
+              Subscriptions
+            </Button>
+            <Button variant="secondary" onClick={() => fetchBranches().catch(() => {})}>
+              <RefreshCw size={14} />
+              Branches
+            </Button>
+          </div>
+        </Card>
+      )}
 
-              <div>
-                <h3 className="text-[16px] font-medium text-[var(--text-primary)] mb-1">
-                  {plan.name}
-                </h3>
-                <div className="flex items-baseline gap-1 mt-2 mb-4">
-                  <span className="text-[28px] font-light text-[var(--accent)] leading-none">
-                    {plan.price}
-                  </span>
-                  <span className="text-[12px] text-[var(--text-muted)]">
-                    / {plan.period}
-                  </span>
-                </div>
-
-                {/* Features list */}
-                <ul className="space-y-2 mb-6">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-[13px] text-[var(--text-secondary)]">
-                      <Check size={14} className="text-[var(--green)] mt-0.5" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="pt-4 border-t border-[var(--border-default)] flex items-center justify-between">
-                <Button variant="ghost" className="text-[12px] px-2">
-                  Edit Plan
-                </Button>
-                <Button variant="ghost" className="text-[12px] px-2 text-[var(--text-muted)]">
-                  Archive
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Subscriptions Table */}
-      <div className="space-y-4 pt-4">
-        <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
-          SUBSCRIBERS REGISTRY
-        </div>
-
-        {/* Desktop View */}
-        <div className="hidden lg:block overflow-hidden border border-[var(--border-default)] rounded-[var(--radius-lg)]">
-          <table className="w-full text-left border-collapse bg-[var(--bg-surface)]">
-            <thead>
-              <tr className="bg-[var(--bg-page)] text-[10px] tracking-[0.1em] text-[var(--text-muted)] uppercase font-semibold border-b border-[var(--border-default)]">
-                <th className="py-4 px-6">Member</th>
-                <th className="py-4 px-6">Plan</th>
-                <th className="py-4 px-6 text-center">Status</th>
-                <th className="py-4 px-6 text-right">Amount</th>
-                <th className="py-4 px-6">Next Billing</th>
-                <th className="py-4 px-6 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border-default)] text-[13px] text-[var(--text-primary)]">
-              {subscribers.map((sub) => (
-                <tr key={sub.id} className="hover:bg-[var(--bg-hover)] transition-colors duration-150">
-                  <td className="py-4 px-6 font-medium">{sub.member}</td>
-                  <td className="py-4 px-6 text-[var(--text-secondary)]">{sub.plan}</td>
-                  <td className="py-4 px-6 text-center">{getStatusBadge(sub.status)}</td>
-                  <td className="py-4 px-6 text-right font-medium font-mono">{sub.amount}</td>
-                  <td className="py-4 px-6 text-[var(--text-muted)]">{sub.nextBilling}</td>
-                  <td className="py-4 px-6 text-right">
-                    <button 
-                      className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-md transition-colors"
-                      style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <MoreHorizontal size={16} />
-                    </button>
-                  </td>
+      {isLoading ? (
+        <Card className="flex items-center justify-center py-20">
+          <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+        </Card>
+      ) : subscriptions.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+          <Users size={40} className="text-[var(--text-muted)] opacity-60" />
+          <div className="space-y-1">
+            <h3 className="text-[14px] font-semibold text-[var(--text-secondary)]">No subscriptions yet</h3>
+            <p className="text-[12px] text-[var(--text-muted)] max-w-xs">
+              Admit an active member to a branch and membership plan to create the first subscription.
+            </p>
+          </div>
+          <Button variant="primary" onClick={openForm} disabled={!!missingSetupMessage}>
+            <Plus size={14} />
+            Admit Member
+          </Button>
+        </Card>
+      ) : (
+        <>
+          <div className="hidden lg:block overflow-hidden border border-[var(--border-default)] rounded-[var(--radius-lg)]">
+            <table className="w-full text-left border-collapse bg-[var(--bg-surface)]">
+              <thead>
+                <tr className="bg-[var(--bg-page)] text-[10px] tracking-[0.1em] text-[var(--text-muted)] uppercase font-semibold border-b border-[var(--border-default)]">
+                  <th className="py-4 px-6">Subscription</th>
+                  <th className="py-4 px-6">Member</th>
+                  <th className="py-4 px-6">Plan</th>
+                  <th className="py-4 px-6">Branch</th>
+                  <th className="py-4 px-6 text-center">Status</th>
+                  <th className="py-4 px-6 text-right">Price</th>
+                  <th className="py-4 px-6">Valid Window</th>
+                  <th className="py-4 px-6 text-right">Capacity</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-default)] text-[13px] text-[var(--text-primary)]">
+                {subscriptions.map((subscription) => (
+                  <SubscriptionRow
+                    key={subscription.id}
+                    subscription={subscription}
+                    member={memberById.get(subscription.primary_member_id)}
+                    plan={planById.get(subscription.membership_plan_id)}
+                    branchName={branchById.get(subscription.branch_id)?.name}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Tablet/Mobile View */}
-        <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4">
-          {subscribers.map((sub) => (
-            <Card key={sub.id} className="flex flex-col justify-between space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-[14px] text-[var(--text-primary)]">{sub.member}</span>
-                {getStatusBadge(sub.status)}
-              </div>
-              <div className="pt-2 border-t border-[var(--border-default)] grid grid-cols-2 gap-2 text-[12px]">
-                <div>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Plan</span>
-                  <span className="font-medium text-[var(--text-primary)] truncate block">{sub.plan}</span>
+          <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+            {subscriptions.map((subscription) => (
+              <SubscriptionCard
+                key={subscription.id}
+                subscription={subscription}
+                member={memberById.get(subscription.primary_member_id)}
+                plan={planById.get(subscription.membership_plan_id)}
+                branchName={branchById.get(subscription.branch_id)?.name}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {isFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                  Admission
                 </div>
-                <div>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Billing</span>
-                  <span className="font-medium font-mono text-[var(--text-primary)]">{sub.amount}</span>
+                <h2 className="text-[18px] font-medium text-[var(--text-primary)]">Create subscription</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                aria-label="Close admission form"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-3 rounded-md border border-[var(--red)]/30 text-[13px] text-[var(--red)] bg-[var(--red)]/10">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SelectField
+                  label="Member"
+                  value={form.primary_member_id}
+                  onChange={(value) => setForm((current) => ({ ...current, primary_member_id: value }))}
+                  required
+                >
+                  <option value="">Select active member</option>
+                  {activeMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} · {member.phone}
+                    </option>
+                  ))}
+                </SelectField>
+
+                <SelectField label="Branch" value={form.branch_id} onChange={handleBranchChange} required>
+                  <option value="">Select branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                      {branch.city ? ` · ${branch.city}` : ''}
+                    </option>
+                  ))}
+                </SelectField>
+
+                <SelectField
+                  label="Membership Plan"
+                  value={form.membership_plan_id}
+                  onChange={(value) => setForm((current) => ({ ...current, membership_plan_id: value }))}
+                  required
+                  disabled={!form.branch_id}
+                >
+                  <option value="">{form.branch_id ? 'Select active plan' : 'Select branch first'}</option>
+                  {availablePlans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} · {formatMoney(plan.price, plan.currency)}
+                      {plan.branch_id ? ' · Branch-specific' : ' · Org-wide'}
+                    </option>
+                  ))}
+                </SelectField>
+
+                <Input
+                  label="Start Date"
+                  type="date"
+                  value={form.start_date}
+                  onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))}
+                  required
+                />
+              </div>
+
+              {!form.branch_id && (
+                <div className="p-3 rounded-md border border-[var(--accent)]/30 text-[13px] text-[var(--accent-text)] bg-[var(--accent-subtle)]">
+                  Select a branch before choosing a plan. Active org-wide and matching branch plans will be available.
                 </div>
+              )}
+
+              <PlanPreview plan={selectedPlan} endDate={previewEndDate} lastValidDay={previewLastValidDay} />
+
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+                <Button type="button" variant="secondary" onClick={closeForm} disabled={createSubscription.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createSubscription.isPending}>
+                  {createSubscription.isPending ? 'Creating...' : 'Create Subscription'}
+                </Button>
               </div>
-              <div className="pt-2 border-t border-[var(--border-default)] flex justify-between items-center text-[12px]">
-                <span className="text-[var(--text-muted)]">Renewal: {sub.nextBilling}</span>
-                <Button variant="ghost" className="text-[11px] py-1 px-2.5">Manage</Button>
-              </div>
-            </Card>
-          ))}
+            </form>
+          </Card>
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  required?: boolean;
+  disabled?: boolean;
+}
+
+function SelectField({ label, value, onChange, children, required, disabled }: SelectFieldProps) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[11px] tracking-[0.08em] text-[var(--text-muted)] uppercase font-semibold">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        disabled={disabled}
+        className="bg-[var(--bg-input)] border border-[var(--border-default)] rounded-[var(--radius-md)] px-3 py-2.5 text-[16px] md:text-[14px] text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {children}
+      </select>
+    </div>
+  );
+}
+
+function PlanPreview({
+  plan,
+  endDate,
+  lastValidDay,
+}: {
+  plan?: MembershipPlan;
+  endDate: string | null;
+  lastValidDay: string | null;
+}) {
+  if (!plan) {
+    return (
+      <Card className="bg-[var(--bg-page)]">
+        <div className="flex items-center gap-3 text-[13px] text-[var(--text-muted)]">
+          <CalendarDays size={18} />
+          <span>Plan price, duration, end date, and capacity preview will appear after plan selection.</span>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-[var(--bg-page)] space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] font-semibold">
+            Preview
+          </div>
+          <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{plan.name}</h3>
+        </div>
+        <Badge variant="healthy">Active</Badge>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[12px]">
+        <PreviewItem label="Price" value={formatMoney(plan.price, plan.currency)} />
+        <PreviewItem label="Duration" value={formatDuration(plan.duration_value, plan.duration_unit)} />
+        <PreviewItem label="Backend End Date" value={endDate ? formatDate(endDate) : 'Calculated after creation'} />
+        <PreviewItem label="Last Valid Day" value={lastValidDay ? formatDate(lastValidDay) : 'Calculated after creation'} />
+      </div>
+      <div className="text-[12px] text-[var(--text-muted)]">
+        This plan allows up to {plan.max_members} {plan.max_members === 1 ? 'member' : 'members'}. Additional slots can be
+        managed later.
+      </div>
+    </Card>
+  );
+}
+
+function PreviewItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">{label}</span>
+      <span className="font-medium text-[var(--text-primary)]">{value}</span>
+    </div>
+  );
+}
+
+function SubscriptionRow({
+  subscription,
+  member,
+  plan,
+  branchName,
+}: {
+  subscription: MemberSubscriptionV2;
+  member?: Member;
+  plan?: MembershipPlan;
+  branchName?: string;
+}) {
+  const activeSlotCount = subscription.members?.filter((slot) => slot.is_active).length ?? 1;
+
+  return (
+    <tr className="hover:bg-[var(--bg-hover)] transition-colors duration-150">
+      <td className="py-4 px-6">
+        <div className="font-medium">{subscription.subscription_code}</div>
+        <div className="text-[11px] text-[var(--text-muted)]">UID {subscription.id}</div>
+      </td>
+      <td className="py-4 px-6">
+        <div className="font-medium">{member?.name ?? subscription.primary_member_id}</div>
+        <div className="text-[11px] text-[var(--text-muted)]">{member?.phone ?? 'Member ID shown'}</div>
+      </td>
+      <td className="py-4 px-6 text-[var(--text-secondary)]">{plan?.name ?? subscription.membership_plan_id}</td>
+      <td className="py-4 px-6 text-[var(--text-secondary)]">{branchName ?? subscription.branch_id}</td>
+      <td className="py-4 px-6 text-center">
+        <Badge variant={getStatusBadgeVariant(subscription.status)}>{titleCase(subscription.status)}</Badge>
+      </td>
+      <td className="py-4 px-6 text-right font-mono font-medium">
+        {formatMoney(subscription.price_snapshot, subscription.currency_code)}
+      </td>
+      <td className="py-4 px-6 text-[var(--text-secondary)]">
+        <div>{formatDate(subscription.start_date)}</div>
+        <div className="text-[11px] text-[var(--text-muted)]">Ends {formatDate(subscription.end_date)}</div>
+      </td>
+      <td className="py-4 px-6 text-right">
+        {activeSlotCount}/{subscription.max_members_snapshot}
+      </td>
+    </tr>
+  );
+}
+
+function SubscriptionCard({
+  subscription,
+  member,
+  plan,
+  branchName,
+}: {
+  subscription: MemberSubscriptionV2;
+  member?: Member;
+  plan?: MembershipPlan;
+  branchName?: string;
+}) {
+  const activeSlotCount = subscription.members?.filter((slot) => slot.is_active).length ?? 1;
+
+  return (
+    <Card className="flex flex-col justify-between space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-semibold text-[14px] text-[var(--text-primary)] truncate">
+            {member?.name ?? subscription.primary_member_id}
+          </div>
+          <div className="text-[11px] text-[var(--text-muted)] truncate">{subscription.subscription_code}</div>
+        </div>
+        <Badge variant={getStatusBadgeVariant(subscription.status)}>{titleCase(subscription.status)}</Badge>
+      </div>
+
+      <div className="pt-2 border-t border-[var(--border-default)] grid grid-cols-2 gap-3 text-[12px]">
+        <PreviewItem label="Plan" value={plan?.name ?? subscription.membership_plan_id} />
+        <PreviewItem label="Branch" value={branchName ?? subscription.branch_id} />
+        <PreviewItem label="Price" value={formatMoney(subscription.price_snapshot, subscription.currency_code)} />
+        <PreviewItem label="Capacity" value={`${activeSlotCount}/${subscription.max_members_snapshot}`} />
+        <PreviewItem label="Start" value={formatDate(subscription.start_date)} />
+        <PreviewItem label="End" value={formatDate(subscription.end_date)} />
+      </div>
+
+      <div className="flex items-center gap-2 text-[12px] text-[var(--text-muted)]">
+        <CheckCircle2 size={14} className="text-[var(--green)]" />
+        <span>Primary member slot created</span>
+      </div>
+    </Card>
   );
 }

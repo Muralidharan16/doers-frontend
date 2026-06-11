@@ -23,10 +23,14 @@ export const membershipPlansKeys = {
 
 // --- List ---
 
-export const useMembershipPlans = (params?: MembershipPlanListParams) => {
+export const useMembershipPlans = (
+  params?: MembershipPlanListParams,
+  options?: { enabled?: boolean }
+) => {
   return useQuery({
     queryKey: membershipPlansKeys.list(params),
     queryFn: () => getMembershipPlans(params),
+    enabled: options?.enabled ?? true,
   });
 };
 

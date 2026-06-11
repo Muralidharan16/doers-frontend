@@ -191,7 +191,7 @@ export const getSubscriptions = async (
   orgId: string,
   params?: SubscriptionListParams
 ): Promise<SubscriptionListResponse> => {
-  const response = await apiClient.get(`/organizations/${orgId}/subscriptions`, {
+  const response = await apiClient.get(`/organizations/${orgId}/member-subscriptions`, {
     params: toApiParams(params),
   });
   return normalizeSubscriptionList(response.data, params);
@@ -202,7 +202,7 @@ export const getSubscription = async (
   subscriptionId: string
 ): Promise<MemberSubscriptionV2> => {
   const response = await apiClient.get(
-    `/organizations/${orgId}/subscriptions/${subscriptionId}`
+    `/organizations/${orgId}/member-subscriptions/${subscriptionId}`
   );
   return normalizeSubscription(response.data);
 };
@@ -212,7 +212,7 @@ export const createSubscription = async (
   payload: CreateSubscriptionPayload
 ): Promise<MemberSubscriptionV2> => {
   const response = await apiClient.post(
-    `/organizations/${orgId}/subscriptions`,
+    `/organizations/${orgId}/member-subscriptions`,
     cleanCreateSubscriptionPayload(payload)
   );
   return normalizeSubscription(response.data);
