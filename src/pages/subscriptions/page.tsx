@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AlertTriangle, CalendarDays, CheckCircle2, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { useBranchStore } from '@/features/gym';
 import { useMembershipPlans } from '@/features/gym/hooks/useMembershipPlans';
 import type { MembershipPlan } from '@/features/gym/types/membershipPlans';
 import { useMembers } from '@/features/members';
@@ -14,7 +13,20 @@ import type { Member } from '@/features/members';
 import { useCreateSubscription, useSubscriptions } from '@/features/subscriptions';
 import type { CreateSubscriptionPayload, MemberSubscriptionV2, ModernSubscriptionStatus } from '@/features/subscriptions';
 import { getApiErrorMessage } from '@/shared/lib/apiError';
-import { getAuthTokenPayload } from '@/shared/services/api/client';
+import { fetchBranches, getAuthTokenPayload } from '@/shared/services/api/client';
+
+interface BranchOption {
+  id: string;
+  name: string;
+  city?: string | null;
+}
+
+interface ApiBranch {
+  id?: unknown;
+  name?: unknown;
+  internal_code?: unknown;
+  address_city?: unknown;
+}
 
 interface AdmissionFormState {
   primary_member_id: string;
@@ -100,6 +112,21 @@ const getLastValidDay = (endDate: string | null): string | null => {
 const isPlanAvailableForBranch = (plan: MembershipPlan, branchId: string): boolean =>
   plan.status === 'active' && (!plan.branch_id || plan.branch_id === branchId);
 
+const normalizeBranchOption = (branch: ApiBranch): BranchOption | null => {
+  if (typeof branch.id !== 'string' || !branch.id) return null;
+  const name = typeof branch.name === 'string' && branch.name.trim()
+    ? branch.name.trim()
+    : typeof branch.internal_code === 'string' && branch.internal_code.trim()
+      ? branch.internal_code.trim()
+      : 'Unnamed branch';
+
+  return {
+    id: branch.id,
+    name,
+    city: typeof branch.address_city === 'string' ? branch.address_city : null,
+  };
+};
+
 const buildCreatePayload = (form: AdmissionFormState): CreateSubscriptionPayload => ({
   branch_id: form.branch_id,
   membership_plan_id: form.membership_plan_id,
@@ -107,22 +134,48 @@ const buildCreatePayload = (form: AdmissionFormState): CreateSubscriptionPayload
   start_date: form.start_date || null,
 });
 
+const formatMissingSetupMessage = (items: string[]): string | null => {
+  if (items.length === 0) return null;
+  if (items.length === 1) return `Create ${items[0]} before admission.`;
+  const lastItem = items[items.length - 1];
+  const leadingItems = items.slice(0, -1).join(', ');
+  return `Create ${leadingItems} and ${lastItem} before admission.`;
+};
+
 export default function SubscriptionsPage() {
   const orgId = getCurrentOrgId();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<AdmissionFormState>(emptyFormState);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(Boolean(orgId));
+  const [branchError, setBranchError] = useState<string | null>(null);
 
-  const branches = useBranchStore((state) => state.branches);
-  const branchesLoading = useBranchStore((state) => state.isLoading);
-  const branchError = useBranchStore((state) => state.error);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
+  const loadBranches = useCallback(() => {
+    if (!orgId) return;
+
+    setBranchesLoading(true);
+    setBranchError(null);
+
+    fetchBranches()
+      .then((response) => {
+        const rawBranches: ApiBranch[] = Array.isArray(response.data?.data) ? response.data.data : [];
+        setBranches(rawBranches.map(normalizeBranchOption).filter((branch): branch is BranchOption => Boolean(branch)));
+      })
+      .catch((error) => {
+        setBranches([]);
+        setBranchError(getApiErrorMessage(error, 'Unable to load branches.'));
+      })
+      .finally(() => {
+        setBranchesLoading(false);
+      });
+  }, [orgId]);
 
   useEffect(() => {
-    if (!orgId || branches.length > 0 || branchesLoading) return;
-    fetchBranches().catch(() => {});
-  }, [branches.length, branchesLoading, fetchBranches, orgId]);
+    if (!orgId) return;
+    void Promise.resolve().then(loadBranches);
+  }, [loadBranches, orgId]);
 
   const membersQuery = useMembers(orgId, { status: 'active', is_active: true, limit: 50 });
   const plansQuery = useMembershipPlans({ plan_status: 'active' }, { enabled: !!orgId });
@@ -162,7 +215,22 @@ export default function SubscriptionsPage() {
     0
   );
 
+  const missingSetupItems = useMemo(() => {
+    const items: string[] = [];
+    if (!membersQuery.isLoading && activeMembers.length === 0) items.push('an active member');
+    if (!branchesLoading && branches.length === 0) items.push('a branch');
+    if (!plansQuery.isLoading && activePlans.length === 0) items.push('an active membership plan');
+    return items;
+  }, [activeMembers.length, activePlans.length, branches.length, branchesLoading, membersQuery.isLoading, plansQuery.isLoading]);
+
+  const missingSetupMessage = formatMissingSetupMessage(missingSetupItems);
+
   const openForm = () => {
+    if (missingSetupMessage) {
+      setFormError(missingSetupMessage);
+      setSuccessMessage(null);
+      return;
+    }
     setForm(emptyFormState());
     setFormError(null);
     setSuccessMessage(null);
@@ -221,12 +289,6 @@ export default function SubscriptionsPage() {
   };
 
   const isLoading = membersQuery.isLoading || plansQuery.isLoading || subscriptionsQuery.isLoading || branchesLoading;
-  const missingSetupMessage = (() => {
-    if (!membersQuery.isLoading && activeMembers.length === 0) return 'Create a member before admission.';
-    if (!branchesLoading && branches.length === 0) return 'Create a branch before admission.';
-    if (!plansQuery.isLoading && activePlans.length === 0) return 'Create an active membership plan before admission.';
-    return null;
-  })();
 
   if (!orgId) {
     return (
@@ -246,7 +308,7 @@ export default function SubscriptionsPage() {
         title="Admissions & Subscriptions"
         category="Management"
         action={
-          <Button variant="primary" onClick={openForm} className="gap-2" disabled={!!missingSetupMessage}>
+          <Button variant="primary" onClick={openForm} className="gap-2" title={missingSetupMessage ?? undefined}>
             <Plus size={14} />
             <span>Admit Member</span>
           </Button>
@@ -256,6 +318,12 @@ export default function SubscriptionsPage() {
       {successMessage && (
         <div className="p-3 rounded-md border border-[var(--green)]/30 text-[13px] text-[var(--green)] bg-[var(--green)]/10">
           {successMessage}
+        </div>
+      )}
+
+      {formError && !isFormOpen && (
+        <div className="p-3 rounded-md border border-[var(--red)]/30 text-[13px] text-[var(--red)] bg-[var(--red)]/10">
+          {formError}
         </div>
       )}
 
@@ -325,7 +393,7 @@ export default function SubscriptionsPage() {
               <RefreshCw size={14} />
               Subscriptions
             </Button>
-            <Button variant="secondary" onClick={() => fetchBranches().catch(() => {})}>
+            <Button variant="secondary" onClick={loadBranches}>
               <RefreshCw size={14} />
               Branches
             </Button>
@@ -346,7 +414,7 @@ export default function SubscriptionsPage() {
               Admit an active member to a branch and membership plan to create the first subscription.
             </p>
           </div>
-          <Button variant="primary" onClick={openForm} disabled={!!missingSetupMessage}>
+          <Button variant="primary" onClick={openForm} title={missingSetupMessage ?? undefined}>
             <Plus size={14} />
             Admit Member
           </Button>
