@@ -19,6 +19,15 @@ type ApiListEnvelope = {
   pages?: unknown;
 };
 
+type NormalizedListEnvelope = {
+  data: unknown[];
+  total?: unknown;
+  page?: unknown;
+  size?: unknown;
+  page_size?: unknown;
+  pages?: unknown;
+};
+
 const forbiddenCreatePayloadKeys = new Set([
   'org_id',
   'subscription_code',
@@ -76,8 +85,7 @@ const isSubscriptionMember = (value: unknown): value is SubscriptionMember => {
     isString(value.role) &&
     subscriptionRoles.has(value.role as SubscriptionMemberRole) &&
     typeof value.is_active === 'boolean' &&
-    isString(value.joined_at) &&
-    isString(value.created_at)
+    isString(value.joined_at)
   );
 };
 
@@ -130,24 +138,51 @@ const normalizeSubscriptionList = (
   value: unknown,
   params?: SubscriptionListParams
 ): SubscriptionListResponse => {
+  if (Array.isArray(value)) {
+    const data = value.map(normalizeSubscription);
+    return {
+      data,
+      total: data.length,
+      page: params?.page ?? 1,
+      size: params?.limit ?? data.length,
+      pages: 1,
+    };
+  }
+
   if (!isRecord(value)) {
     throw new Error('Unexpected subscription list response shape.');
   }
 
   const envelope = value as ApiListEnvelope;
-  if (!Array.isArray(envelope.data)) {
+  let listEnvelope: NormalizedListEnvelope | null = null;
+  if (Array.isArray(envelope.data)) {
+    listEnvelope = { ...envelope, data: envelope.data };
+  } else if (isRecord(envelope.data) && Array.isArray(envelope.data.data)) {
+    const nested = envelope.data as ApiListEnvelope;
+    const nestedData = envelope.data.data;
+    listEnvelope = {
+      data: nestedData,
+      total: nested.total ?? envelope.total,
+      page: nested.page ?? envelope.page,
+      size: nested.size ?? envelope.size,
+      page_size: nested.page_size ?? envelope.page_size,
+      pages: nested.pages ?? envelope.pages,
+    };
+  }
+
+  if (!listEnvelope) {
     throw new Error('Unexpected subscription list response shape.');
   }
 
-  const data = envelope.data.map(normalizeSubscription);
-  const size = asNumber(envelope.size, asNumber(envelope.page_size, params?.limit ?? data.length));
+  const data = listEnvelope.data.map(normalizeSubscription);
+  const size = asNumber(listEnvelope.size, asNumber(listEnvelope.page_size, params?.limit ?? data.length));
 
   return {
     data,
-    total: asNumber(envelope.total, data.length),
-    page: asNumber(envelope.page, params?.page ?? 1),
+    total: asNumber(listEnvelope.total, data.length),
+    page: asNumber(listEnvelope.page, params?.page ?? 1),
     size,
-    pages: asNumber(envelope.pages, size > 0 ? Math.ceil(data.length / size) : 0),
+    pages: asNumber(listEnvelope.pages, size > 0 ? Math.ceil(data.length / size) : 0),
   };
 };
 
@@ -181,10 +216,13 @@ export const cleanCreateSubscriptionPayload = (
 const toApiParams = (params?: SubscriptionListParams) => {
   if (!params) return undefined;
   const { limit, ...rest } = params;
-  return {
+  const apiParams = {
     ...rest,
     page_size: limit,
   };
+  return Object.fromEntries(
+    Object.entries(apiParams).filter(([, value]) => value !== undefined && value !== '')
+  );
 };
 
 export const getSubscriptions = async (

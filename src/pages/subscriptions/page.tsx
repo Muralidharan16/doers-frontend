@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Plus, RefreshCw, Search, Users, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -142,10 +142,29 @@ const formatMissingSetupMessage = (items: string[]): string | null => {
   return `Create ${leadingItems} and ${lastItem} before admission.`;
 };
 
+const formatMemberNumber = (member?: Member): string =>
+  member ? String(member.member_number).padStart(3, '0') : '---';
+
+const formatMemberLine = (member: Member): string =>
+  `${formatMemberNumber(member)} — ${member.name}`;
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [delayMs, value]);
+
+  return debouncedValue;
+}
+
 export default function SubscriptionsPage() {
   const orgId = getCurrentOrgId();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<AdmissionFormState>(emptyFormState);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedMemberSnapshot, setSelectedMemberSnapshot] = useState<Member | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -177,7 +196,18 @@ export default function SubscriptionsPage() {
     void Promise.resolve().then(loadBranches);
   }, [loadBranches, orgId]);
 
-  const membersQuery = useMembers(orgId, { status: 'active', is_active: true, limit: 50 });
+  const debouncedMemberSearch = useDebouncedValue(memberSearch.trim(), 300);
+  const memberSearchBranchId = isFormOpen && form.branch_id ? form.branch_id : undefined;
+  const membersQuery = useMembers(orgId, { status: 'active', is_active: true, page: 1, limit: 200 });
+  const admissionMembersQuery = useMembers(orgId, {
+    status: 'active',
+    is_active: true,
+    has_active_subscription: false,
+    page: 1,
+    branch_id: memberSearchBranchId,
+    search: debouncedMemberSearch || undefined,
+    limit: 20,
+  });
   const plansQuery = useMembershipPlans({ plan_status: 'active' }, { enabled: !!orgId });
   const subscriptionsQuery = useSubscriptions(orgId, { page: 1, limit: 50 });
   const createSubscription = useCreateSubscription(orgId);
@@ -185,6 +215,11 @@ export default function SubscriptionsPage() {
   const activeMembers = useMemo(
     () => (membersQuery.data?.data ?? []).filter((member) => member.status === 'active' && member.is_active),
     [membersQuery.data?.data]
+  );
+
+  const admissionMembers = useMemo(
+    () => (admissionMembersQuery.data?.data ?? []).filter((member) => member.status === 'active' && member.is_active),
+    [admissionMembersQuery.data?.data]
   );
 
   const activePlans = useMemo(
@@ -195,6 +230,10 @@ export default function SubscriptionsPage() {
   const subscriptions = subscriptionsQuery.data?.data ?? [];
 
   const memberById = useMemo(() => new Map(activeMembers.map((member) => [member.id, member])), [activeMembers]);
+  const admissionMemberById = useMemo(
+    () => new Map(admissionMembers.map((member) => [member.id, member])),
+    [admissionMembers]
+  );
   const planById = useMemo(() => new Map(activePlans.map((plan) => [plan.id, plan])), [activePlans]);
   const branchById = useMemo(() => new Map(branches.map((branch) => [branch.id, branch])), [branches]);
 
@@ -204,6 +243,11 @@ export default function SubscriptionsPage() {
   }, [activePlans, form.branch_id]);
 
   const selectedPlan = form.membership_plan_id ? planById.get(form.membership_plan_id) : undefined;
+  const selectedMember = form.primary_member_id
+    ? admissionMemberById.get(form.primary_member_id)
+      ?? memberById.get(form.primary_member_id)
+      ?? (selectedMemberSnapshot?.id === form.primary_member_id ? selectedMemberSnapshot : undefined)
+    : undefined;
   const previewEndDate = selectedPlan
     ? addDuration(form.start_date, selectedPlan.duration_value, selectedPlan.duration_unit)
     : null;
@@ -232,6 +276,8 @@ export default function SubscriptionsPage() {
       return;
     }
     setForm(emptyFormState());
+    setMemberSearch('');
+    setSelectedMemberSnapshot(null);
     setFormError(null);
     setSuccessMessage(null);
     setIsFormOpen(true);
@@ -241,11 +287,16 @@ export default function SubscriptionsPage() {
     if (createSubscription.isPending) return;
     setIsFormOpen(false);
     setForm(emptyFormState());
+    setMemberSearch('');
+    setSelectedMemberSnapshot(null);
     setFormError(null);
   };
 
   const validateForm = (): string | null => {
     if (!form.primary_member_id) return 'Select an active member before admission.';
+    if (!selectedMember) return 'Select an active member before admission.';
+    if (selectedMember.status !== 'active' || !selectedMember.is_active) return 'This member is inactive.';
+    if (selectedMember.has_active_subscription) return 'This member already has an active subscription.';
     if (!form.branch_id) return 'Select a branch before admission.';
     if (!form.membership_plan_id) return 'Select an active membership plan.';
     if (!form.start_date) return 'Select a start date.';
@@ -276,13 +327,34 @@ export default function SubscriptionsPage() {
     }
   };
 
+  const handleMemberSelect = (member: Member) => {
+    setForm((current) => ({ ...current, primary_member_id: member.id }));
+    setSelectedMemberSnapshot(member);
+    setMemberSearch('');
+    setFormError(null);
+  };
+
+  const clearMemberSelection = () => {
+    setForm((current) => ({ ...current, primary_member_id: '' }));
+    setSelectedMemberSnapshot(null);
+  };
+
   const handleBranchChange = (branchId: string) => {
+    if (branchId) setFormError(null);
     setForm((current) => {
       const plan = current.membership_plan_id ? planById.get(current.membership_plan_id) : undefined;
       const shouldClearPlan = plan && branchId && !isPlanAvailableForBranch(plan, branchId);
+      const shouldClearMember = Boolean(
+        selectedMember && branchId && selectedMember.home_branch_id && selectedMember.home_branch_id !== branchId
+      );
+      if (shouldClearMember) {
+        setSelectedMemberSnapshot(null);
+        setMemberSearch('');
+      }
       return {
         ...current,
         branch_id: branchId,
+        primary_member_id: shouldClearMember ? '' : current.primary_member_id,
         membership_plan_id: shouldClearPlan ? '' : current.membership_plan_id,
       };
     });
@@ -491,19 +563,19 @@ export default function SubscriptionsPage() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <SelectField
+                <MemberSearchCombobox
                   label="Member"
+                  members={admissionMembers}
                   value={form.primary_member_id}
-                  onChange={(value) => setForm((current) => ({ ...current, primary_member_id: value }))}
+                  selectedMember={selectedMember}
+                  query={memberSearch}
+                  onQueryChange={setMemberSearch}
+                  onSelect={handleMemberSelect}
+                  onClear={clearMemberSelection}
+                  isLoading={admissionMembersQuery.isFetching}
+                  error={admissionMembersQuery.error ? getApiErrorMessage(admissionMembersQuery.error, 'Unable to search members.') : null}
                   required
-                >
-                  <option value="">Select active member</option>
-                  {activeMembers.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name} · {member.phone}
-                    </option>
-                  ))}
-                </SelectField>
+                />
 
                 <SelectField label="Branch" value={form.branch_id} onChange={handleBranchChange} required>
                   <option value="">Select branch</option>
@@ -518,7 +590,10 @@ export default function SubscriptionsPage() {
                 <SelectField
                   label="Membership Plan"
                   value={form.membership_plan_id}
-                  onChange={(value) => setForm((current) => ({ ...current, membership_plan_id: value }))}
+                  onChange={(value) => {
+                    setForm((current) => ({ ...current, membership_plan_id: value }));
+                    if (value) setFormError(null);
+                  }}
                   required
                   disabled={!form.branch_id}
                 >
@@ -535,7 +610,10 @@ export default function SubscriptionsPage() {
                   label="Start Date"
                   type="date"
                   value={form.start_date}
-                  onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, start_date: event.target.value }));
+                    if (event.target.value) setFormError(null);
+                  }}
                   required
                 />
               </div>
@@ -558,6 +636,183 @@ export default function SubscriptionsPage() {
               </div>
             </form>
           </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MemberSearchComboboxProps {
+  label: string;
+  members: Member[];
+  value: string;
+  selectedMember?: Member;
+  query: string;
+  onQueryChange: (query: string) => void;
+  onSelect: (member: Member) => void;
+  onClear: () => void;
+  isLoading: boolean;
+  error: string | null;
+  required?: boolean;
+}
+
+function getMemberAvailability(member: Member): {
+  label: string;
+  variant: 'healthy' | 'warning' | 'muted' | 'gold';
+  disabled: boolean;
+} {
+  if (member.status !== 'active' || !member.is_active) {
+    return { label: 'Inactive', variant: 'muted', disabled: true };
+  }
+  if (member.has_active_subscription) {
+    return { label: 'Already subscribed', variant: 'warning', disabled: true };
+  }
+  return { label: 'Available', variant: 'healthy', disabled: false };
+}
+
+function MemberSearchCombobox({
+  label,
+  members,
+  value,
+  selectedMember,
+  query,
+  onQueryChange,
+  onSelect,
+  onClear,
+  isLoading,
+  error,
+  required,
+}: MemberSearchComboboxProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectableIndexes = useMemo(
+    () => members
+      .map((member, index) => (getMemberAvailability(member).disabled ? -1 : index))
+      .filter((index) => index >= 0),
+    [members],
+  );
+  const activeOptionIndex = selectableIndexes.includes(activeIndex) ? activeIndex : selectableIndexes[0] ?? 0;
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const selectMember = (member: Member) => {
+    const availability = getMemberAvailability(member);
+    if (availability.disabled) return;
+    onSelect(member);
+    setIsOpen(false);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      setIsOpen(false);
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setIsOpen(true);
+      if (selectableIndexes.length === 0) return;
+      const currentPosition = Math.max(0, selectableIndexes.indexOf(activeOptionIndex));
+      const nextPosition = event.key === 'ArrowDown'
+        ? (currentPosition + 1) % selectableIndexes.length
+        : (currentPosition - 1 + selectableIndexes.length) % selectableIndexes.length;
+      setActiveIndex(selectableIndexes[nextPosition]);
+      return;
+    }
+    if (event.key === 'Enter' && isOpen) {
+      event.preventDefault();
+      const member = members[activeOptionIndex];
+      if (member) selectMember(member);
+    }
+  };
+
+  const displayValue = isOpen ? query : selectedMember ? formatMemberLine(selectedMember) : query;
+
+  return (
+    <div className="relative flex flex-col gap-1.5" ref={containerRef}>
+      <label className="text-[11px] tracking-[0.08em] text-[var(--text-muted)] uppercase font-semibold">
+        {label}
+      </label>
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+        <input
+          value={displayValue}
+          onChange={(event) => {
+            onQueryChange(event.target.value);
+            if (value) onClear();
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
+          required={required && !value}
+          placeholder="Search member no., name, or mobile"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls="admission-member-options"
+          className="w-full bg-[var(--bg-input)] border border-[var(--border-default)] rounded-[var(--radius-md)] pl-9 pr-3 py-2.5 text-[16px] md:text-[14px] text-[var(--text-primary)]"
+        />
+      </div>
+
+      {selectedMember && !isOpen && (
+        <div className="flex items-center justify-between gap-2 text-[12px] text-[var(--text-muted)]">
+          <span className="truncate">{selectedMember.phone} · {selectedMember.home_branch_name ?? 'No branch'}</span>
+          <Badge variant={getMemberAvailability(selectedMember).variant}>{getMemberAvailability(selectedMember).label}</Badge>
+        </div>
+      )}
+
+      {isOpen && (
+        <div
+          id="admission-member-options"
+          role="listbox"
+          className="absolute top-full left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg"
+        >
+          {isLoading && (
+            <div className="px-3 py-3 text-[13px] text-[var(--text-muted)]">Searching members...</div>
+          )}
+          {!isLoading && error && (
+            <div className="px-3 py-3 text-[13px] text-[var(--red)]">{error}</div>
+          )}
+          {!isLoading && !error && members.length === 0 && (
+            <div className="px-3 py-3 text-[13px] text-[var(--text-muted)]">No members found.</div>
+          )}
+          {!isLoading && !error && members.map((member, index) => {
+            const availability = getMemberAvailability(member);
+            const isActive = index === activeOptionIndex;
+            return (
+              <button
+                key={member.id}
+                type="button"
+                role="option"
+                aria-selected={value === member.id}
+                disabled={availability.disabled}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => selectMember(member)}
+                className={`w-full px-3 py-2.5 text-left border-b border-[var(--border-default)] last:border-b-0 transition-colors ${
+                  isActive ? 'bg-[var(--bg-hover)]' : 'bg-transparent'
+                } ${availability.disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-[var(--bg-hover)]'}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-[var(--text-primary)] truncate">
+                      {formatMemberLine(member)}
+                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)] truncate">
+                      {member.phone} · {member.home_branch_name ?? 'No branch'}
+                    </div>
+                  </div>
+                  <Badge variant={availability.variant}>{availability.label}</Badge>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

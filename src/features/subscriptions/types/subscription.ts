@@ -19,7 +19,7 @@ export interface SubscriptionMember {
   is_active: boolean;
   joined_at: string;
   left_at?: string | null;
-  created_at: string;
+  created_at?: string | null;
   updated_at?: string | null;
 }
 

@@ -20,11 +20,25 @@ type ApiListEnvelope = {
   pages?: unknown;
 };
 
+type NormalizedListEnvelope = {
+  data: unknown[];
+  total?: unknown;
+  page?: unknown;
+  size?: unknown;
+  page_size?: unknown;
+  pages?: unknown;
+};
+
 const forbiddenPayloadKeys = new Set([
   'id',
   'org_id',
   'gym_id',
   'member_uid',
+  'member_number',
+  'member_display_code',
+  'has_active_subscription',
+  'active_subscription_id',
+  'home_branch_name',
   'qr_token',
   'created_by',
   'updated_by',
@@ -40,6 +54,7 @@ const isMember = (value: unknown): value is Member => {
     typeof value.id === 'string' &&
     typeof value.org_id === 'string' &&
     typeof value.member_uid === 'string' &&
+    typeof value.member_number === 'number' &&
     typeof value.name === 'string' &&
     typeof value.phone === 'string' &&
     typeof value.status === 'string' &&
@@ -90,18 +105,34 @@ const normalizeMemberListResponse = (value: unknown, params?: MemberListParams):
   }
 
   const envelope = value as ApiListEnvelope;
-  if (!Array.isArray(envelope.data) || !envelope.data.every(isMember)) {
+  let listEnvelope: NormalizedListEnvelope | null = null;
+  if (Array.isArray(envelope.data)) {
+    listEnvelope = { ...envelope, data: envelope.data };
+  } else if (isRecord(envelope.data) && Array.isArray(envelope.data.data)) {
+    const nested = envelope.data as ApiListEnvelope;
+    const nestedData = envelope.data.data;
+    listEnvelope = {
+      data: nestedData,
+      total: nested.total ?? envelope.total,
+      page: nested.page ?? envelope.page,
+      size: nested.size ?? envelope.size,
+      page_size: nested.page_size ?? envelope.page_size,
+      pages: nested.pages ?? envelope.pages,
+    };
+  }
+
+  if (!listEnvelope || !listEnvelope.data.every(isMember)) {
     throw new Error('Unexpected member list response shape.');
   }
 
-  const size = asNumber(envelope.size, asNumber(envelope.page_size, params?.limit ?? envelope.data.length));
+  const size = asNumber(listEnvelope.size, asNumber(listEnvelope.page_size, params?.limit ?? listEnvelope.data.length));
 
   return {
-    data: envelope.data,
-    total: asNumber(envelope.total, envelope.data.length),
-    page: asNumber(envelope.page, params?.page ?? 1),
+    data: listEnvelope.data,
+    total: asNumber(listEnvelope.total, listEnvelope.data.length),
+    page: asNumber(listEnvelope.page, params?.page ?? 1),
     size,
-    pages: asNumber(envelope.pages, size > 0 ? Math.ceil(envelope.data.length / size) : 0),
+    pages: asNumber(listEnvelope.pages, size > 0 ? Math.ceil(listEnvelope.data.length / size) : 0),
   };
 };
 
@@ -151,10 +182,13 @@ export const cleanUpdateMemberPayload = (payload: UpdateMemberPayload): UpdateMe
 const toApiParams = (params?: MemberListParams) => {
   if (!params) return undefined;
   const { limit, ...rest } = params;
-  return {
+  const apiParams = {
     ...rest,
     page_size: limit,
   };
+  return Object.fromEntries(
+    Object.entries(apiParams).filter(([, value]) => value !== undefined && value !== '')
+  );
 };
 
 export const getMembers = async (

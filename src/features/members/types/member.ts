@@ -6,6 +6,11 @@ export interface Member {
   gym_id?: string | null;
   home_branch_id?: string | null;
   member_uid: string;
+  member_number: number;
+  member_display_code?: string | null;
+  home_branch_name?: string | null;
+  has_active_subscription?: boolean;
+  active_subscription_id?: string | null;
   name: string;
   phone: string;
   email?: string | null;
@@ -61,6 +66,8 @@ export interface MemberListParams {
   search?: string;
   status?: MemberStatus;
   home_branch_id?: string;
+  branch_id?: string;
+  has_active_subscription?: boolean;
   is_active?: boolean;
   page?: number;
   limit?: number;
