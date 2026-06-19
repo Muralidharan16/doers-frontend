@@ -83,6 +83,9 @@ const getInitials = (name: string): string =>
     .toUpperCase()
     .slice(0, 2) || 'MB';
 
+const formatMemberNumber = (member: Member): string =>
+  Number.isFinite(member.member_number) ? String(member.member_number) : 'Not assigned';
+
 const titleCase = (value: string): string =>
   value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 
@@ -527,7 +530,7 @@ export default function MembersPage() {
                       <div>
                         <div className="font-medium">{member.name}</div>
                         <div className="text-[11px] text-[var(--text-muted)] font-normal">
-                          {member.email || 'No email'} · UID {member.member_uid}
+                          {member.email || 'No email'} · Member No. {formatMemberNumber(member)}
                         </div>
                       </div>
                     </td>
@@ -592,8 +595,8 @@ export default function MembersPage() {
                     <span className="font-medium text-[var(--text-primary)]">{member.phone}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Member UID</span>
-                    <span className="font-medium text-[var(--text-primary)] break-all">{member.member_uid}</span>
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Member No.</span>
+                    <span className="font-medium text-[var(--text-primary)] break-all">{formatMemberNumber(member)}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">Home Branch</span>
