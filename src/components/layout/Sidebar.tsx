@@ -6,12 +6,13 @@ import { useBranchStore } from '@/features/gym';
 import { X, LayoutDashboard, Users, CreditCard, DollarSign, BarChart3, CalendarCheck, Building2, Settings, LogOut } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { assetService } from '@/lib/services/assetService';
+import { PLATFORM_BILLING_FRONTEND_SHELL } from '@/config/flags';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/members', label: 'Members', icon: Users },
-  { to: '/subscriptions', label: 'Subscriptions', icon: CreditCard },
-  { to: '/billing', label: 'Payments', icon: DollarSign },
+  { to: '/subscriptions', label: PLATFORM_BILLING_FRONTEND_SHELL ? 'Member Subscriptions' : 'Subscriptions', icon: CreditCard },
+  { to: '/billing', label: PLATFORM_BILLING_FRONTEND_SHELL ? 'Member Payments & Collections' : 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
   { to: '/gyms', label: 'Gyms', icon: Building2 },
@@ -141,7 +142,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                       className="transition-all duration-150" 
                       style={{ color: isActive ? 'var(--accent)' : 'var(--text-secondary)' }}
                     />
-                    <span className="text-[13px] tracking-[0.03em]">{item.label}</span>
+                    <span className="text-[13px] tracking-[0.03em] leading-tight min-w-0">{item.label}</span>
                   </div>
                 </>
               )}

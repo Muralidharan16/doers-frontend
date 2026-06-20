@@ -8,6 +8,8 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { BranchManagementSection } from '@/components/settings/BranchManagementSection';
 import { MembershipPlansSection } from '@/components/settings/MembershipPlansSection';
+import { PLATFORM_BILLING_FRONTEND_SHELL } from '@/config/flags';
+import { PlanBillingPage } from '@/features/platformBilling';
 
 const TABS = [
   { id: 'basic', label: 'Organization Info', icon: Building },
@@ -179,66 +181,70 @@ export default function SettingsPage() {
               <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold">
                 {TABS.find(t => t.id === activeTab)?.label.toUpperCase()}
               </div>
-              <Card className="divide-y divide-[var(--border-default)]">
-                {activeTab === 'security' && (
-                  <>
-                    <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <div className="text-[13px] font-semibold text-[var(--text-primary)]">Two-Factor Authentication</div>
-                        <div className="text-[11px] text-[var(--text-muted)]">Secure your staff logins with multi-factor passcodes.</div>
+              {activeTab === 'billing' && PLATFORM_BILLING_FRONTEND_SHELL ? (
+                <PlanBillingPage embedded />
+              ) : (
+                <Card className="divide-y divide-[var(--border-default)]">
+                  {activeTab === 'security' && (
+                    <>
+                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Two-Factor Authentication</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">Secure your staff logins with multi-factor passcodes.</div>
+                        </div>
+                        {renderToggleSwitch(twoFactor, setTwoFactor)}
                       </div>
-                      {renderToggleSwitch(twoFactor, setTwoFactor)}
-                    </div>
-                    <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <div className="text-[13px] font-semibold text-[var(--text-primary)]">Auto Sign-Out</div>
-                        <div className="text-[11px] text-[var(--text-muted)]">Automatically sign out after 15 minutes of inactivity.</div>
+                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Auto Sign-Out</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">Automatically sign out after 15 minutes of inactivity.</div>
+                        </div>
+                        {renderToggleSwitch(true, () => {})}
                       </div>
-                      {renderToggleSwitch(true, () => {})}
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
 
-                {activeTab === 'notifications' && (
-                  <>
-                    <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <div className="text-[13px] font-semibold text-[var(--text-primary)]">Push Check-in Notifications</div>
-                        <div className="text-[11px] text-[var(--text-muted)]">Receive immediate alerts when members check in.</div>
+                  {activeTab === 'notifications' && (
+                    <>
+                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Push Check-in Notifications</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">Receive immediate alerts when members check in.</div>
+                        </div>
+                        {renderToggleSwitch(true, () => {})}
                       </div>
-                      {renderToggleSwitch(true, () => {})}
-                    </div>
-                    <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <div className="text-[13px] font-semibold text-[var(--text-primary)]">Payment Failure Alerts</div>
-                        <div className="text-[11px] text-[var(--text-muted)]">Get notified when a member's payment fails.</div>
+                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Payment Failure Alerts</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">Get notified when a member's payment fails.</div>
+                        </div>
+                        {renderToggleSwitch(true, () => {})}
                       </div>
-                      {renderToggleSwitch(true, () => {})}
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
 
-                {activeTab === 'billing' && (
-                  <>
-                    <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <div className="text-[13px] font-semibold text-[var(--text-primary)]">Current Plan</div>
-                        <div className="text-[11px] text-[var(--text-muted)]">You're on the Doers Gold plan.</div>
+                  {activeTab === 'billing' && (
+                    <>
+                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Current Plan</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">You're on the Doers Gold plan.</div>
+                        </div>
+                        <div className="text-[12px] font-medium text-[var(--accent-text)] bg-[var(--accent-subtle)] px-2.5 py-1 rounded-[var(--radius-sm)]">
+                          GOLD
+                        </div>
                       </div>
-                      <div className="text-[12px] font-medium text-[var(--accent-text)] bg-[var(--accent-subtle)] px-2.5 py-1 rounded-[var(--radius-sm)]">
-                        GOLD
+                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Tax & GST Identification</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">Add your GST number for invoice compliance.</div>
+                        </div>
+                        <Button variant="secondary">Configure tax</Button>
                       </div>
-                    </div>
-                    <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-0.5">
-                        <div className="text-[13px] font-semibold text-[var(--text-primary)]">Tax & GST Identification</div>
-                        <div className="text-[11px] text-[var(--text-muted)]">Add your GST number for invoice compliance.</div>
-                      </div>
-                      <Button variant="secondary">Configure tax</Button>
-                    </div>
-                  </>
-                )}
-              </Card>
+                    </>
+                  )}
+                </Card>
+              )}
             </div>
           )}
         </main>

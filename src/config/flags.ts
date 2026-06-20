@@ -1,0 +1,2 @@
+export const PLATFORM_BILLING_FRONTEND_SHELL =
+  import.meta.env.VITE_PLATFORM_BILLING_FRONTEND_SHELL === 'true';
