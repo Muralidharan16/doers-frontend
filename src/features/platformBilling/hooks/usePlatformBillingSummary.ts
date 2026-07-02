@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchPlatformBillingSummary } from '../api/platformBillingApi';
+import { fetchPlatformBillingSummary, shouldRetryPlatformBillingRead } from '../api/platformBillingApi';
 
 export function usePlatformBillingSummary(enabled: boolean) {
   return useQuery({
     queryKey: ['platform-billing', 'summary'],
-    queryFn: fetchPlatformBillingSummary,
+    queryFn: ({ signal }) => fetchPlatformBillingSummary(signal),
     enabled,
-    retry: 1,
+    retry: shouldRetryPlatformBillingRead,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
