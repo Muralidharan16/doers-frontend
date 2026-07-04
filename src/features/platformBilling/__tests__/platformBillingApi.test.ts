@@ -1,7 +1,9 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import {
+  createPlatformBillingCheckoutSession,
   fetchPlatformBillingCheckoutOptions,
+  fetchPlatformBillingCheckoutOperation,
   fetchPlatformBillingSummary,
   PlatformBillingReadError,
   shouldRetryPlatformBillingRead,
@@ -69,12 +71,214 @@ describe('Platform Billing API reads', () => {
   });
 
   it('bounds retries to temporary and rate-limited read failures', () => {
-    expect(shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('temporary', 'temporary'))).toBe(true);
-    expect(shouldRetryPlatformBillingRead(1, new PlatformBillingReadError('rate_limited', 'rate limited'))).toBe(true);
-    expect(shouldRetryPlatformBillingRead(2, new PlatformBillingReadError('temporary', 'temporary'))).toBe(false);
-    expect(shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('auth', 'auth'))).toBe(false);
-    expect(shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('denied', 'denied'))).toBe(false);
-    expect(shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('not_found', 'not found'))).toBe(false);
-    expect(shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('validation', 'validation'))).toBe(false);
+    expect(
+      shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('temporary', 'temporary')),
+    ).toBe(true);
+    expect(
+      shouldRetryPlatformBillingRead(1, new PlatformBillingReadError('rate_limited', 'rate limited')),
+    ).toBe(true);
+    expect(
+      shouldRetryPlatformBillingRead(2, new PlatformBillingReadError('temporary', 'temporary')),
+    ).toBe(false);
+    expect(
+      shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('auth', 'auth')),
+    ).toBe(false);
+    expect(
+      shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('denied', 'denied')),
+    ).toBe(false);
+    expect(
+      shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('not_found', 'not found')),
+    ).toBe(false);
+    expect(
+      shouldRetryPlatformBillingRead(0, new PlatformBillingReadError('validation', 'validation')),
+    ).toBe(false);
+  });
+
+
+
+  it('posts checkout creation to the backend endpoint with idempotency header and only allowed body fields', async () => {
+    const seen: { headers?: Headers; body?: Record<string, unknown>; method?: string; url?: string } = {};
+    server.use(
+      http.post('*/api/v1/platform-billing/checkout-sessions', async ({ request }) => {
+        seen.headers = request.headers;
+        seen.method = request.method;
+        seen.url = request.url;
+        seen.body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          operation_id: '00000000-0000-4000-8000-000000000101',
+          operation_status: 'pending',
+          checkout_session_reference: null,
+          fake_checkout_token: null,
+          expires_at: null,
+          confirmation_state: 'not_started',
+          replayed: false,
+          browser_authoritative: false,
+        }, { status: 201 });
+      }),
+    );
+
+    await createPlatformBillingCheckoutSession(
+      { plan_code: 'DOERS-STARTER', billing_interval: 'month' },
+      'Checkout_Key-1234',
+    );
+
+    expect(seen.method).toBe('POST');
+    expect(seen.url).toContain('/api/v1/platform-billing/checkout-sessions');
+    const idempotencyKey = seen.headers?.get('Idempotency-Key') ?? '';
+    expect(idempotencyKey.length).toBeGreaterThanOrEqual(16);
+    expect(idempotencyKey.length).toBeLessThanOrEqual(160);
+    expect(idempotencyKey).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(seen.body).toEqual({ plan_code: 'DOERS-STARTER', billing_interval: 'month' });
+    expect(seen.body).not.toHaveProperty('amount');
+    expect(seen.body).not.toHaveProperty('currency');
+    expect(seen.body).not.toHaveProperty('tenant_id');
+    expect(seen.body).not.toHaveProperty('organization_id');
+    expect(JSON.stringify(seen.body)).not.toMatch(/provider/i);
+  });
+
+  it('gets checkout operation status from the backend operation endpoint', async () => {
+    let seenUrl = '';
+    server.use(
+      http.get('*/api/v1/platform-billing/checkout-operations/00000000-0000-4000-8000-000000000102', ({ request }) => {
+        seenUrl = request.url;
+        return HttpResponse.json({
+          operation_id: '00000000-0000-4000-8000-000000000102',
+          operation_status: 'pending',
+          checkout_session_reference: null,
+          expires_at: null,
+          error_code: null,
+          browser_authoritative: false,
+        });
+      }),
+    );
+
+    const operation = await fetchPlatformBillingCheckoutOperation('00000000-0000-4000-8000-000000000102');
+
+    expect(seenUrl).toContain('/api/v1/platform-billing/checkout-operations/00000000-0000-4000-8000-000000000102');
+    expect(operation.operation_status).toBe('pending');
+  });
+
+  it('maps create checkout HTTP errors to safe action error kinds', async () => {
+    await Promise.all(
+      [
+        [403, 'denied'],
+        [409, 'conflict'],
+        [422, 'validation'],
+        [429, 'rate_limited'],
+        [500, 'temporary'],
+      ] as const,
+    ).then(async (cases) => {
+      for (const [status, kind] of cases) {
+        server.use(
+          http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+            HttpResponse.json({ detail: { secret: 'raw backend payload' } }, { status }),
+          ),
+        );
+        await expect(
+          createPlatformBillingCheckoutSession({ plan_code: 'DOERS-STARTER', billing_interval: 'month' }, 'A'.repeat(16)),
+        ).rejects.toMatchObject({ kind, status });
+      }
+    });
+  });
+
+  it('rejects browser_authoritative create responses at API boundary', async () => {
+    server.use(
+      http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+        HttpResponse.json(
+          {
+            operation_id: '00000000-0000-4000-8000-000000000000',
+            operation_status: 'pending',
+            checkout_session_reference: null,
+            fake_checkout_token: null,
+            expires_at: null,
+            confirmation_state: 'unconfirmed',
+            replayed: false,
+            browser_authoritative: true,
+          },
+          { status: 201 },
+        ),
+      ),
+    );
+
+    await expect(
+      createPlatformBillingCheckoutSession({ plan_code: 'DOERS-STARTER', billing_interval: 'month' }, 'A'.repeat(16)),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('rejects malformed create responses at API boundary', async () => {
+    server.use(
+      http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+        HttpResponse.json({ bad: 'response' }, { status: 201 }),
+      ),
+    );
+
+    await expect(
+      createPlatformBillingCheckoutSession({ plan_code: 'DOERS-STARTER', billing_interval: 'month' }, 'A'.repeat(16)),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('maps operation GET errors to safe action error kinds', async () => {
+    await Promise.all(
+      [
+        ['403', 'denied'],
+        ['not_found', 'not_found'],
+        ['422', 'validation'],
+        ['429', 'rate_limited'],
+        ['500', 'temporary'],
+      ] as const,
+    ).then(async (cases) => {
+      for (const [scenario, kind] of cases) {
+        server.use(
+          http.get('*/api/v1/platform-billing/checkout-operations/*', () =>
+            HttpResponse.json({ detail: 'error' }, { status: Number(scenario) || 404 }),
+          ),
+        );
+        await expect(
+          fetchPlatformBillingCheckoutOperation('00000000-0000-4000-8000-000000000001'),
+        ).rejects.toMatchObject({ kind });
+      }
+    });
+  });
+
+  it('rejects browser_authoritative operation GET responses at API boundary', async () => {
+    server.use(
+      http.get('*/api/v1/platform-billing/checkout-operations/*', () =>
+        HttpResponse.json(
+          {
+            operation_id: '00000000-0000-4000-8000-000000000001',
+            operation_status: 'pending',
+            checkout_session_reference: null,
+            expires_at: null,
+            error_code: null,
+            browser_authoritative: true,
+          },
+          { status: 200 },
+        ),
+      ),
+    );
+    await expect(
+      fetchPlatformBillingCheckoutOperation('00000000-0000-4000-8000-000000000001'),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('rejects malformed operation responses at API boundary', async () => {
+    server.use(
+      http.get('*/api/v1/platform-billing/checkout-operations/*', () =>
+        HttpResponse.json({ bad: 'response' }, { status: 200 }),
+      ),
+    );
+
+    await expect(
+      fetchPlatformBillingCheckoutOperation('00000000-0000-4000-8000-000000000103'),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('does not expose raw backend payload on create action errors', async () => {
+    server.use(
+      http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+        HttpResponse.json({ detail: { secret: 'raw backend payload' } }, { status: 500 }),
+      ),
+    );
+    await expect(createPlatformBillingCheckoutSession({ plan_code: 'DOERS-STARTER', billing_interval: 'month' }, 'A'.repeat(16))).rejects.toMatchObject({ kind: 'temporary' });
   });
 });

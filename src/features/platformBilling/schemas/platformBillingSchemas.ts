@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 const isoDateTime = z.string().datetime({ offset: true });
 const nullableIsoDateTime = isoDateTime.nullable();
@@ -15,7 +15,13 @@ export const platformBillingSummarySchema = z.strictObject({
   schema_version: z.number().int(),
   organization_id: z.string().uuid(),
   access: z.strictObject({
-    mode: z.enum(['full', 'limited_write', 'read_only', 'billing_only', 'blocked']),
+    mode: z.enum([
+      "full",
+      "limited_write",
+      "read_only",
+      "billing_only",
+      "blocked",
+    ]),
     safe_reason_code: z.string(),
     effective_from: nullableIsoDateTime,
     next_transition_at: nullableIsoDateTime,
@@ -36,9 +42,9 @@ export const platformBillingSummarySchema = z.strictObject({
   entitlements: z.array(
     z.strictObject({
       key: z.string(),
-      value_type: z.enum(['boolean', 'integer', 'string', 'json']),
+      value_type: z.enum(["boolean", "integer", "string", "json"]),
       value: entitlementValueSchema,
-    })
+    }),
   ),
   usage: z.array(
     z.strictObject({
@@ -47,7 +53,7 @@ export const platformBillingSummarySchema = z.strictObject({
       limit: z.number().nullable(),
       over_limit: z.boolean().nullable(),
       stale_after: nullableIsoDateTime,
-    })
+    }),
   ),
   decision_availability: z.strictObject({
     available: z.boolean(),
@@ -57,7 +63,9 @@ export const platformBillingSummarySchema = z.strictObject({
 });
 
 export const platformBillingCurrentSubscriptionOptionSchema = z.strictObject({
-  status: z.enum(['active', 'trialing', 'cancel_scheduled', 'canceled', 'expired']).nullable(),
+  status: z
+    .enum(["active", "trialing", "cancel_scheduled", "canceled", "expired"])
+    .nullable(),
   current_plan_code: z.string().nullable(),
   current_plan_display_name: z.string().nullable(),
   period_type: z.string().nullable(),
@@ -65,11 +73,11 @@ export const platformBillingCurrentSubscriptionOptionSchema = z.strictObject({
 });
 
 export const platformBillingPriceOptionSchema = z.strictObject({
-  billing_interval: z.enum(['month', 'year', 'one_time']),
+  billing_interval: z.enum(["month", "year", "one_time"]),
   interval_count: z.number().int().positive(),
   amount_minor: z.number().int().nonnegative().safe(),
   currency: currencyCode,
-  tax_behavior: z.enum(['exclusive', 'inclusive', 'not_applicable']),
+  tax_behavior: z.enum(["exclusive", "inclusive", "not_applicable"]),
 });
 
 export const platformBillingPlanOptionSchema = z.strictObject({
@@ -82,9 +90,9 @@ export const platformBillingPlanOptionSchema = z.strictObject({
 });
 
 export const platformBillingActionOptionSchema = z.strictObject({
-  action_code: z.literal('start_subscription'),
+  action_code: z.literal("start_subscription"),
   target_plan_code: z.string().nullable(),
-  billing_interval: z.enum(['month', 'year', 'one_time']).nullable(),
+  billing_interval: z.enum(["month", "year", "one_time"]).nullable(),
   display_label: z.string(),
   is_available: z.boolean(),
   unavailable_reason_code: z.string().nullable(),
@@ -93,35 +101,35 @@ export const platformBillingActionOptionSchema = z.strictObject({
 });
 
 export const checkoutAvailabilityReasonCodeSchema = z.enum([
-  'ACTION_NOT_PERMITTED',
-  'CHECKOUT_FEATURE_DISABLED',
-  'ENVIRONMENT_DENIED',
-  'PROVIDER_MODE_UNAVAILABLE',
-  'PROVIDER_CUSTOMER_MISSING',
-  'CURRENT_SUBSCRIPTION_EXISTS',
-  'ACTIVE_SUBSCRIPTION_EXISTS',
-  'TRIAL_SUBSCRIPTION_EXISTS',
-  'CANCELLATION_SCHEDULED',
-  'NO_AVAILABLE_PLANS',
-  'CATALOG_TERMS_UNAVAILABLE',
-  'CATALOG_PRICE_AMBIGUOUS',
+  "ACTION_NOT_PERMITTED",
+  "CHECKOUT_FEATURE_DISABLED",
+  "ENVIRONMENT_DENIED",
+  "PROVIDER_MODE_UNAVAILABLE",
+  "PROVIDER_CUSTOMER_MISSING",
+  "CURRENT_SUBSCRIPTION_EXISTS",
+  "ACTIVE_SUBSCRIPTION_EXISTS",
+  "TRIAL_SUBSCRIPTION_EXISTS",
+  "CANCELLATION_SCHEDULED",
+  "NO_AVAILABLE_PLANS",
+  "CATALOG_TERMS_UNAVAILABLE",
+  "CATALOG_PRICE_AMBIGUOUS",
 ]);
 
 export const platformBillingCheckoutAvailabilitySchema = z.strictObject({
   available: z.boolean(),
   reason_code: checkoutAvailabilityReasonCodeSchema.nullable(),
   message: z.string(),
-  action_code: z.literal('start_subscription'),
+  action_code: z.literal("start_subscription"),
 });
 
 export const fakeCheckoutSimulationAvailabilitySchema = z.strictObject({
   available: z.boolean(),
-  allowed_outcomes: z.array(z.enum(['pending', 'succeeded', 'failed'])),
+  allowed_outcomes: z.array(z.enum(["pending", "succeeded", "failed"])),
   warning: z.string(),
 });
 
 export const platformBillingCheckoutOptionsSchema = z.strictObject({
-  schema_version: z.literal('platform-billing-checkout-options-v1'),
+  schema_version: z.literal("platform-billing-checkout-options-v1"),
   server_time: isoDateTime,
   catalog_version: z.string().regex(/^platform-catalog-sha256:[0-9a-f]{64}$/),
   current_subscription: platformBillingCurrentSubscriptionOptionSchema,
@@ -133,9 +141,57 @@ export const platformBillingCheckoutOptionsSchema = z.strictObject({
   }),
 });
 
-export type PlatformBillingSummary = z.infer<typeof platformBillingSummarySchema>;
-export type PlatformBillingCheckoutOptions = z.infer<typeof platformBillingCheckoutOptionsSchema>;
-export type PlatformBillingPlanOption = z.infer<typeof platformBillingPlanOptionSchema>;
-export type PlatformBillingPriceOption = z.infer<typeof platformBillingPriceOptionSchema>;
-export type PlatformBillingActionOption = z.infer<typeof platformBillingActionOptionSchema>;
-export type PlatformBillingCheckoutAvailability = z.infer<typeof platformBillingCheckoutAvailabilitySchema>;
+export type PlatformBillingSummary = z.infer<
+  typeof platformBillingSummarySchema
+>;
+export type PlatformBillingCheckoutOptions = z.infer<
+  typeof platformBillingCheckoutOptionsSchema
+>;
+export type PlatformBillingPlanOption = z.infer<
+  typeof platformBillingPlanOptionSchema
+>;
+export type PlatformBillingPriceOption = z.infer<
+  typeof platformBillingPriceOptionSchema
+>;
+export type PlatformBillingActionOption = z.infer<
+  typeof platformBillingActionOptionSchema
+>;
+export type PlatformBillingCheckoutAvailability = z.infer<
+  typeof platformBillingCheckoutAvailabilitySchema
+>;
+
+export const createCheckoutSessionRequestSchema = z.strictObject({
+  plan_code: z.string().min(1).nullable().optional(),
+  plan_id: z.string().uuid().nullable().optional(),
+  billing_interval: z.enum(["month", "year", "one_time"]).nullable().optional(),
+});
+
+export const createCheckoutSessionResponseSchema = z.strictObject({
+  operation_id: z.string().uuid(),
+  operation_status: z.enum(["pending", "in_progress", "succeeded", "failed"]),
+  checkout_session_reference: z.string().nullable(),
+  fake_checkout_token: z.string().nullable(),
+  expires_at: isoDateTime.nullable(),
+  confirmation_state: z.string(),
+  replayed: z.boolean(),
+  browser_authoritative: z.boolean(),
+});
+
+export const getCheckoutOperationResponseSchema = z.strictObject({
+  operation_id: z.string().uuid(),
+  operation_status: z.enum(["pending", "in_progress", "succeeded", "failed"]),
+  checkout_session_reference: z.string().nullable(),
+  expires_at: isoDateTime.nullable(),
+  error_code: z.string().nullable(),
+  browser_authoritative: z.boolean(),
+});
+
+export type CreateCheckoutSessionRequest = z.infer<
+  typeof createCheckoutSessionRequestSchema
+>;
+export type CreateCheckoutSessionResponse = z.infer<
+  typeof createCheckoutSessionResponseSchema
+>;
+export type GetCheckoutOperationResponse = z.infer<
+  typeof getCheckoutOperationResponseSchema
+>;
