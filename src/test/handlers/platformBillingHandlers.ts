@@ -134,6 +134,7 @@ export const platformBillingHandlers = [
 
 const idempotencyStore = new Map<string, Record<string, unknown>>();
 const operationsStore = new Map<string, Record<string, unknown>>();
+const simulationStore = new Map<string, Record<string, unknown>>();
 
 function makeUuid() {
   try {
@@ -320,6 +321,103 @@ platformBillingHandlers.push(
       }
 
       // Default: return stored state
+      return HttpResponse.json(stored);
+    },
+  ),
+);
+
+platformBillingHandlers.push(
+  http.post(
+    "*/api/v1/platform-billing/fake-checkout-simulations",
+    async ({ request }) => {
+      const scenario = request.headers.get("x-msw-scenario") || "";
+      const idKey = request.headers.get("Idempotency-Key") || "";
+
+      if (idKey && !/^[A-Za-z0-9_-]{16,160}$/.test(idKey)) {
+        return HttpResponse.json(
+          { detail: "Invalid Idempotency-Key" },
+          { status: 422 },
+        );
+      }
+      if (scenario === "403")
+        return HttpResponse.json({ detail: "forbidden" }, { status: 403 });
+      if (scenario === "409")
+        return HttpResponse.json({ detail: "conflict" }, { status: 409 });
+      if (scenario === "422")
+        return HttpResponse.json({ detail: "invalid" }, { status: 422 });
+      if (scenario === "429")
+        return HttpResponse.json({ detail: "rate_limited" }, { status: 429 });
+      if (scenario === "500")
+        return HttpResponse.json({ detail: "server" }, { status: 500 });
+
+      let body: Record<string, unknown>;
+      try {
+        body = (await request.json()) as Record<string, unknown>;
+      } catch {
+        return HttpResponse.json({ detail: "invalid body" }, { status: 422 });
+      }
+
+      if (idKey && idempotencyStore.has(idKey)) {
+        return HttpResponse.json(
+          idempotencyStore.get(idKey) as Record<string, unknown>,
+          { status: 200 },
+        );
+      }
+
+      const checkoutOperationId = String(body.checkout_operation_id || "");
+      const requestedOutcome = String(body.requested_outcome || "");
+      if (
+        !checkoutOperationId ||
+        !["pending", "succeeded", "failed"].includes(requestedOutcome)
+      ) {
+        return HttpResponse.json({ detail: "invalid body" }, { status: 422 });
+      }
+
+      const operation = operationsStore.get(checkoutOperationId);
+      if (!operation) {
+        return HttpResponse.json({ detail: "not found" }, { status: 404 });
+      }
+
+      const status =
+        requestedOutcome === "succeeded"
+          ? "succeeded"
+          : requestedOutcome === "failed"
+            ? "failed"
+            : "pending";
+      operationsStore.set(checkoutOperationId, {
+        ...operation,
+        operation_status: status,
+        error_code: status === "failed" ? "simulated_failure" : null,
+      });
+
+      const response = {
+        simulation_operation_id: makeUuid(),
+        checkout_operation_id: checkoutOperationId,
+        outcome_status: "outcome_" + requestedOutcome,
+        webhook_processing_status: status === "pending" ? null : "processed",
+        provider_event_reference: "provider_event_secret",
+        replayed: false,
+        browser_authoritative: scenario === "browser_authoritative",
+        subscription_activated: scenario === "subscription_activated",
+      };
+      simulationStore.set(response.simulation_operation_id, response);
+      if (idKey) idempotencyStore.set(idKey, response);
+
+      return HttpResponse.json(response, { status: 201 });
+    },
+  ),
+);
+
+platformBillingHandlers.push(
+  http.get(
+    "*/api/v1/platform-billing/fake-checkout-simulations/:simulation_operation_id",
+    ({ params }) => {
+      const simulationOperationId = (params as Record<string, string>)
+        .simulation_operation_id as string;
+      const stored = simulationStore.get(simulationOperationId);
+      if (!stored) {
+        return HttpResponse.json({ detail: "not found" }, { status: 404 });
+      }
       return HttpResponse.json(stored);
     },
   ),

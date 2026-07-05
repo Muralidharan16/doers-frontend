@@ -6,11 +6,15 @@ import {
   platformBillingSummarySchema,
   createCheckoutSessionResponseSchema,
   getCheckoutOperationResponseSchema,
+  createFakeCheckoutSimulationRequestSchema,
+  fakeCheckoutSimulationResponseSchema,
   type PlatformBillingCheckoutOptions,
   type PlatformBillingSummary,
   type CreateCheckoutSessionRequest,
   type CreateCheckoutSessionResponse,
   type GetCheckoutOperationResponse,
+  type CreateFakeCheckoutSimulationRequest,
+  type FakeCheckoutSimulationResponse,
 } from "../schemas/platformBillingSchemas";
 
 export type PlatformBillingReadErrorKind =
@@ -243,6 +247,56 @@ export async function fetchPlatformBillingCheckoutOperation(
     );
     const parsed = getCheckoutOperationResponseSchema.parse(response.data);
     if (parsed.browser_authoritative) {
+      throw new PlatformBillingActionError(
+        "validation",
+        "Checkout response could not be safely read.",
+      );
+    }
+    return parsed;
+  } catch (error) {
+    throw toActionError(error);
+  }
+}
+
+export async function createFakeCheckoutSimulation(
+  payload: CreateFakeCheckoutSimulationRequest,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<FakeCheckoutSimulationResponse> {
+  try {
+    const body = createFakeCheckoutSimulationRequestSchema.parse(payload);
+    const response = await apiClient.post<unknown>(
+      "/api/v1/platform-billing/fake-checkout-simulations",
+      body,
+      {
+        headers: { "Idempotency-Key": idempotencyKey },
+        signal,
+      },
+    );
+    const parsed = fakeCheckoutSimulationResponseSchema.parse(response.data);
+    if (parsed.browser_authoritative || parsed.subscription_activated) {
+      throw new PlatformBillingActionError(
+        "validation",
+        "Checkout response could not be safely read.",
+      );
+    }
+    return parsed;
+  } catch (error) {
+    throw toActionError(error);
+  }
+}
+
+export async function fetchFakeCheckoutSimulation(
+  simulationOperationId: string,
+  signal?: AbortSignal,
+): Promise<FakeCheckoutSimulationResponse> {
+  try {
+    const response = await apiClient.get<unknown>(
+      `/api/v1/platform-billing/fake-checkout-simulations/${simulationOperationId}`,
+      { signal },
+    );
+    const parsed = fakeCheckoutSimulationResponseSchema.parse(response.data);
+    if (parsed.browser_authoritative || parsed.subscription_activated) {
       throw new PlatformBillingActionError(
         "validation",
         "Checkout response could not be safely read.",

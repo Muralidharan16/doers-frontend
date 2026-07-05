@@ -6,12 +6,17 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {
+  createFakeCheckoutSimulation,
   createPlatformBillingCheckoutSession,
+  fetchFakeCheckoutSimulation,
   fetchPlatformBillingCheckoutOperation,
 } from "../api/platformBillingApi";
 import type {
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
+  CreateFakeCheckoutSimulationRequest,
+  FakeCheckoutSimulationOutcome,
+  FakeCheckoutSimulationResponse,
   GetCheckoutOperationResponse,
 } from "../schemas/platformBillingSchemas";
 
@@ -54,6 +59,83 @@ export function useCreatePlatformBillingCheckoutSession() {
   };
 
   return { start, mutation, clearKey };
+}
+
+export function useCreateFakeCheckoutSimulation() {
+  const queryClient = useQueryClient();
+  const inFlightRef = useRef(false);
+
+  const mutation = useMutation<
+    FakeCheckoutSimulationResponse,
+    Error,
+    {
+      checkoutOperationId: string;
+      requestedOutcome: FakeCheckoutSimulationOutcome;
+      idempotencyKey: string;
+    }
+  >({
+    mutationFn: async ({
+      checkoutOperationId,
+      requestedOutcome,
+      idempotencyKey,
+    }) => {
+      const payload: CreateFakeCheckoutSimulationRequest = {
+        checkout_operation_id: checkoutOperationId,
+        requested_outcome: requestedOutcome,
+      };
+      return createFakeCheckoutSimulation(payload, idempotencyKey);
+    },
+    onSuccess: (response) => {
+      const operationQueryKey = [
+        "platform-billing",
+        "checkout-operation",
+        response.checkout_operation_id,
+      ];
+      void queryClient.invalidateQueries({ queryKey: operationQueryKey });
+      void queryClient.refetchQueries({ queryKey: operationQueryKey });
+      if (
+        response.outcome_status === "outcome_succeeded" ||
+        response.outcome_status === "outcome_failed"
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ["platform-billing", "summary"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["platform-billing", "checkout-options"],
+        });
+      }
+    },
+  });
+
+  const simulate = async (variables: {
+    checkoutOperationId: string;
+    requestedOutcome: FakeCheckoutSimulationOutcome;
+    idempotencyKey: string;
+  }) => {
+    if (inFlightRef.current) return undefined;
+    inFlightRef.current = true;
+    try {
+      return await mutation.mutateAsync(variables);
+    } finally {
+      inFlightRef.current = false;
+    }
+  };
+
+  return { simulate, mutation };
+}
+
+export function useFakeCheckoutSimulation(
+  simulationOperationId: string | null,
+) {
+  return useQuery({
+    queryKey: [
+      "platform-billing",
+      "fake-checkout-simulation",
+      simulationOperationId,
+    ],
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
+      fetchFakeCheckoutSimulation(simulationOperationId as string, signal),
+    enabled: Boolean(simulationOperationId),
+    retry: false,
+  });
 }
 
 export function usePlatformBillingCheckoutOperation(
@@ -104,6 +186,7 @@ export function usePlatformBillingCheckoutOperation(
 
     invalidatedOperationRef.current = data.operation_id;
     attemptsRef.current = 0;
+    setTimedOutOperationId(null);
     void queryClient.invalidateQueries({ queryKey: ["platform-billing", "summary"] });
     void queryClient.invalidateQueries({
       queryKey: ["platform-billing", "checkout-options"],
@@ -113,7 +196,7 @@ export function usePlatformBillingCheckoutOperation(
   useEffect(() => {
     if (query.isError) {
       attemptsRef.current = 0;
-      }
+    }
   }, [query.isError]);
 
   return { ...query, timeoutReached: timedOutOperationId === operationId };

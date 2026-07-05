@@ -1,4 +1,5 @@
 import {
+  PLATFORM_BILLING_ENABLE_FAKE_SIMULATOR,
   PLATFORM_BILLING_ENABLE_INTERACTIVE,
   PLATFORM_BILLING_FRONTEND_SHELL,
 } from "@/config/flags";
@@ -14,10 +15,15 @@ import { PlatformBillingUsageCard } from "../components/PlatformBillingUsageCard
 import { usePlatformBillingCheckoutOptions } from "../hooks/usePlatformBillingCheckoutOptions";
 import { usePlatformBillingSummary } from "../hooks/usePlatformBillingSummary";
 import {
+  useCreateFakeCheckoutSimulation,
   useCreatePlatformBillingCheckoutSession,
   usePlatformBillingCheckoutOperation,
 } from "../hooks/usePlatformBillingCheckoutSession";
-import type { PlatformBillingPlanOption } from "../schemas/platformBillingSchemas";
+import type {
+  FakeCheckoutSimulationOutcome,
+  PlatformBillingCheckoutOptions,
+  PlatformBillingPlanOption,
+} from "../schemas/platformBillingSchemas";
 import { generatePlatformBillingIdempotencyKey } from "../utils/idempotency";
 import { useRef, useState } from "react";
 
@@ -92,6 +98,9 @@ export function PlanBillingPage({
               <div className="space-y-2">
                 <StartCheckoutControls
                   plans={optionsQuery.data.plans}
+                  fakeSimulation={
+                    optionsQuery.data.diagnostics.fake_checkout_simulation
+                  }
                   pollingOverride={checkoutPollingOverride}
                 />
               </div>
@@ -112,9 +121,11 @@ export function PlanBillingPage({
 
 function StartCheckoutControls({
   plans,
+  fakeSimulation,
   pollingOverride,
 }: {
   plans: PlatformBillingPlanOption[];
+  fakeSimulation: PlatformBillingCheckoutOptions["diagnostics"]["fake_checkout_simulation"];
   pollingOverride?: { pollIntervalMs?: number; maxAttempts?: number };
 }) {
   const [operationId, setOperationId] = useState<string | null>(null);
@@ -172,6 +183,15 @@ function StartCheckoutControls({
   const selectedPrice = selectedPlan?.prices[selectedIntervalIndex];
   const hasSelection = Boolean(selectedPlan && selectedPrice);
   const isInFlight = mutation.isPending || operationQuery.isFetching;
+  const isTerminalOperation = Boolean(
+    operationQuery.data &&
+      ["succeeded", "failed"].includes(operationQuery.data.operation_status),
+  );
+  const canShowFakeSimulator =
+    PLATFORM_BILLING_ENABLE_FAKE_SIMULATOR &&
+    fakeSimulation.available &&
+    fakeSimulation.allowed_outcomes.length > 0 &&
+    Boolean(operationId);
 
   const errorMessage = getErrorMessage();
 
@@ -244,13 +264,116 @@ function StartCheckoutControls({
         <p className="mt-2 text-sm text-[var(--text-muted)]">
           Checkout operation pending
         </p>
-      ) : operationQuery.data &&
-        ["succeeded", "failed"].includes(
-          operationQuery.data.operation_status,
-        ) ? (
+      ) : isTerminalOperation ? (
         <p className="mt-2 text-sm text-[var(--text-muted)]">
           Checkout operation reached a terminal state
         </p>
+      ) : null}
+
+      {canShowFakeSimulator ? (
+        <DeveloperFakeCheckoutSimulator
+          operationId={operationId}
+          allowedOutcomes={fakeSimulation.allowed_outcomes}
+          onSimulationAccepted={async () => {
+            await operationQuery.refetch();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DeveloperFakeCheckoutSimulator({
+  operationId,
+  allowedOutcomes,
+  onSimulationAccepted,
+}: {
+  operationId: string | null;
+  allowedOutcomes: FakeCheckoutSimulationOutcome[];
+  onSimulationAccepted: (outcome: FakeCheckoutSimulationOutcome) => Promise<void>;
+}) {
+  const { simulate, mutation } = useCreateFakeCheckoutSimulation();
+  const [lastOutcome, setLastOutcome] =
+    useState<FakeCheckoutSimulationOutcome | null>(null);
+
+  const getErrorMessage = () => {
+    const error = mutation.error as unknown as { kind?: string } | null;
+    if (!error) return null;
+    if (error.kind === "denied") {
+      return "You do not have permission to run the simulator.";
+    }
+    if (error.kind === "rate_limited") {
+      return "Simulator request is rate limited. Please try again.";
+    }
+    if (error.kind === "validation") {
+      return "Simulator request could not be submitted. Please retry.";
+    }
+    return "Simulator request temporarily failed. Please retry.";
+  };
+
+  const handleSimulation = async (outcome: FakeCheckoutSimulationOutcome) => {
+    if (!operationId) return;
+    setLastOutcome(null);
+    const response = await simulate({
+      checkoutOperationId: operationId,
+      requestedOutcome: outcome,
+      idempotencyKey: generatePlatformBillingIdempotencyKey(),
+    });
+    if (response?.outcome_status === "outcome_pending") {
+      setLastOutcome("pending");
+      await onSimulationAccepted("pending");
+    }
+    if (response?.outcome_status === "outcome_succeeded") {
+      setLastOutcome("succeeded");
+      await onSimulationAccepted("succeeded");
+    }
+    if (response?.outcome_status === "outcome_failed") {
+      setLastOutcome("failed");
+      await onSimulationAccepted("failed");
+    }
+  };
+
+  const renderButton = (
+    outcome: FakeCheckoutSimulationOutcome,
+    label: string,
+  ) => (
+    <button
+      type="button"
+      disabled={
+        !operationId ||
+        mutation.isPending ||
+        !allowedOutcomes.includes(outcome)
+      }
+      onClick={() => void handleSimulation(outcome)}
+      className="px-3 py-2 rounded border border-[var(--border)] text-[var(--text)] disabled:opacity-50"
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="mt-4 space-y-2 border border-[var(--border)] p-3 rounded">
+      <p className="text-sm font-medium text-[var(--text)]">
+        Developer checkout simulator
+      </p>
+      <p className="text-sm text-[var(--text-muted)]">
+        Development/test only. The browser requests a fake outcome; the backend remains authoritative.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {renderButton("pending", "Simulate pending")}
+        {renderButton("succeeded", "Simulate success")}
+        {renderButton("failed", "Simulate failure")}
+      </div>
+      {mutation.isPending ? (
+        <p className="text-sm text-[var(--text-muted)]">
+          Simulator request submitted
+        </p>
+      ) : lastOutcome ? (
+        <p className="text-sm text-[var(--text-muted)]">
+          Simulator outcome recorded: {lastOutcome}
+        </p>
+      ) : getErrorMessage() ? (
+        <p className="text-sm text-[var(--text-warn)]">{getErrorMessage()}</p>
       ) : null}
     </div>
   );

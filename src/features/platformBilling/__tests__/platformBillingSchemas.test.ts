@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createFakeCheckoutSimulationRequestSchema,
+  fakeCheckoutSimulationResponseSchema,
   platformBillingCheckoutOptionsSchema,
   platformBillingSummarySchema,
 } from '../schemas/platformBillingSchemas';
@@ -69,5 +71,34 @@ describe('Platform Billing runtime schemas', () => {
     const payload = checkoutFixture();
     (payload.diagnostics.fake_checkout_simulation as { allowed_outcomes: string[] }).allowed_outcomes = ['done'];
     expect(() => platformBillingCheckoutOptionsSchema.parse(payload)).toThrow();
+  });
+
+  it('validates fake checkout simulation request and response contracts', () => {
+    expect(
+      createFakeCheckoutSimulationRequestSchema.parse({
+        checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+        requested_outcome: 'failed',
+      }).requested_outcome,
+    ).toBe('failed');
+
+    expect(
+      fakeCheckoutSimulationResponseSchema.parse({
+        simulation_operation_id: '00000000-0000-4000-8000-000000000201',
+        checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+        outcome_status: 'outcome_failed',
+        webhook_processing_status: 'processed',
+        provider_event_reference: null,
+        replayed: false,
+        browser_authoritative: false,
+        subscription_activated: false,
+      }).outcome_status,
+    ).toBe('outcome_failed');
+
+    expect(() =>
+      createFakeCheckoutSimulationRequestSchema.parse({
+        checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+        requested_outcome: 'done',
+      }),
+    ).toThrow();
   });
 });

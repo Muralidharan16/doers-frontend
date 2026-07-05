@@ -1,7 +1,9 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import {
+  createFakeCheckoutSimulation,
   createPlatformBillingCheckoutSession,
+  fetchFakeCheckoutSimulation,
   fetchPlatformBillingCheckoutOptions,
   fetchPlatformBillingCheckoutOperation,
   fetchPlatformBillingSummary,
@@ -271,6 +273,112 @@ describe('Platform Billing API reads', () => {
     await expect(
       fetchPlatformBillingCheckoutOperation('00000000-0000-4000-8000-000000000103'),
     ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+
+  it('posts fake checkout simulation with idempotency and only operation/outcome fields', async () => {
+    const seen: { headers?: Headers; body?: Record<string, unknown>; url?: string } = {};
+    server.use(
+      http.post('*/api/v1/platform-billing/fake-checkout-simulations', async ({ request }) => {
+        seen.headers = request.headers;
+        seen.url = request.url;
+        seen.body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          simulation_operation_id: '00000000-0000-4000-8000-000000000201',
+          checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+          outcome_status: 'outcome_succeeded',
+          webhook_processing_status: 'processed',
+          provider_event_reference: 'provider_event_secret',
+          replayed: false,
+          browser_authoritative: false,
+          subscription_activated: false,
+        }, { status: 201 });
+      }),
+    );
+
+    await createFakeCheckoutSimulation(
+      {
+        checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+        requested_outcome: 'succeeded',
+      },
+      'Simulation_Key-1234',
+    );
+
+    expect(seen.url).toContain('/api/v1/platform-billing/fake-checkout-simulations');
+    expect(seen.headers?.get('Idempotency-Key')).toBe('Simulation_Key-1234');
+    expect(seen.body).toEqual({
+      checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+      requested_outcome: 'succeeded',
+    });
+    expect(seen.body).not.toHaveProperty('amount');
+    expect(seen.body).not.toHaveProperty('currency');
+    expect(seen.body).not.toHaveProperty('tenant_id');
+    expect(JSON.stringify(seen.body)).not.toMatch(/provider/i);
+  });
+
+  it('rejects browser-authoritative or activating fake simulation responses', async () => {
+    server.use(
+      http.post('*/api/v1/platform-billing/fake-checkout-simulations', () =>
+        HttpResponse.json({
+          simulation_operation_id: '00000000-0000-4000-8000-000000000202',
+          checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+          outcome_status: 'outcome_succeeded',
+          webhook_processing_status: 'processed',
+          provider_event_reference: 'provider_event_secret',
+          replayed: false,
+          browser_authoritative: true,
+          subscription_activated: false,
+        }, { status: 201 }),
+      ),
+    );
+
+    await expect(
+      createFakeCheckoutSimulation({ checkout_operation_id: '00000000-0000-4000-8000-000000000101', requested_outcome: 'succeeded' }, 'A'.repeat(16)),
+    ).rejects.toMatchObject({ kind: 'validation' });
+
+    server.use(
+      http.post('*/api/v1/platform-billing/fake-checkout-simulations', () =>
+        HttpResponse.json({
+          simulation_operation_id: '00000000-0000-4000-8000-000000000203',
+          checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+          outcome_status: 'outcome_succeeded',
+          webhook_processing_status: 'processed',
+          provider_event_reference: 'provider_event_secret',
+          replayed: false,
+          browser_authoritative: false,
+          subscription_activated: true,
+        }, { status: 201 }),
+      ),
+    );
+
+    await expect(
+      createFakeCheckoutSimulation({ checkout_operation_id: '00000000-0000-4000-8000-000000000101', requested_outcome: 'succeeded' }, 'B'.repeat(16)),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('fetches fake simulation status through the read endpoint without provider selectors', async () => {
+    let seenUrl = '';
+    server.use(
+      http.get('*/api/v1/platform-billing/fake-checkout-simulations/00000000-0000-4000-8000-000000000204', ({ request }) => {
+        seenUrl = request.url;
+        return HttpResponse.json({
+          simulation_operation_id: '00000000-0000-4000-8000-000000000204',
+          checkout_operation_id: '00000000-0000-4000-8000-000000000101',
+          outcome_status: 'outcome_pending',
+          webhook_processing_status: null,
+          provider_event_reference: 'provider_event_secret',
+          replayed: false,
+          browser_authoritative: false,
+          subscription_activated: false,
+        });
+      }),
+    );
+
+    const response = await fetchFakeCheckoutSimulation('00000000-0000-4000-8000-000000000204');
+
+    expect(response.outcome_status).toBe('outcome_pending');
+    expect(seenUrl).toContain('/api/v1/platform-billing/fake-checkout-simulations/00000000-0000-4000-8000-000000000204');
+    expect(seenUrl).not.toMatch(/organization_id|tenant_id|amount|currency|provider/);
   });
 
   it('does not expose raw backend payload on create action errors', async () => {

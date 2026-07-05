@@ -13,10 +13,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function loadPlanBillingPage(enabled = true, interactive = true) {
+async function loadPlanBillingPage(enabled = true, interactive = true, fakeSimulator = false) {
   vi.resetModules();
   vi.stubEnv('VITE_PLATFORM_BILLING_FRONTEND_SHELL', enabled ? 'true' : 'false');
   vi.stubEnv('VITE_PLATFORM_BILLING_ENABLE_INTERACTIVE', interactive ? 'true' : 'false');
+  vi.stubEnv('VITE_PLATFORM_BILLING_ENABLE_FAKE_SIMULATOR', fakeSimulator ? 'true' : 'false');
   const module = await import('../pages/PlanBillingPage');
   return module.PlanBillingPage;
 }
@@ -491,6 +492,300 @@ describe('PlanBillingPage', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /start checkout/i }));
     expect(await screen.findByText('Checkout request could not be submitted. Please verify your selection and try again.')).toBeInTheDocument();
+  });
+
+
+  it('shows fake simulator controls only after checkout begins and the dev flag is enabled', async () => {
+    const options = checkoutFixture();
+    options.diagnostics.fake_checkout_simulation = {
+      available: true,
+      allowed_outcomes: ['pending', 'succeeded', 'failed'],
+      warning: 'Development test simulator.',
+    };
+    let operationStatus: 'pending' | 'succeeded' = 'pending';
+    const simulationRequests: Array<{ headers: Headers; body: Record<string, unknown> }> = [];
+
+    server.use(
+      http.get('*/api/v1/platform-billing/checkout-options', () => HttpResponse.json(options)),
+      http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+        HttpResponse.json({
+          operation_id: '00000000-0000-4000-8000-000000000301',
+          operation_status: 'pending',
+          checkout_session_reference: 'checkout_ref_secret',
+          fake_checkout_token: 'fake_token_secret',
+          expires_at: null,
+          confirmation_state: 'unconfirmed',
+          replayed: false,
+          browser_authoritative: false,
+        }, { status: 201 }),
+      ),
+      http.get('*/api/v1/platform-billing/checkout-operations/00000000-0000-4000-8000-000000000301', () =>
+        HttpResponse.json({
+          operation_id: '00000000-0000-4000-8000-000000000301',
+          operation_status: operationStatus,
+          checkout_session_reference: 'checkout_ref_secret',
+          expires_at: null,
+          error_code: null,
+          browser_authoritative: false,
+        }),
+      ),
+      http.post('*/api/v1/platform-billing/fake-checkout-simulations', async ({ request }) => {
+        simulationRequests.push({
+          headers: request.headers,
+          body: (await request.json()) as Record<string, unknown>,
+        });
+        operationStatus = 'succeeded';
+        return HttpResponse.json({
+          simulation_operation_id: '00000000-0000-4000-8000-000000000302',
+          checkout_operation_id: '00000000-0000-4000-8000-000000000301',
+          outcome_status: 'outcome_succeeded',
+          webhook_processing_status: 'processed',
+          provider_event_reference: 'provider_event_secret',
+          replayed: false,
+          browser_authoritative: false,
+          subscription_activated: false,
+        }, { status: 201 });
+      }),
+    );
+
+    const PlanBillingPage = await loadPlanBillingPage(true, true, true);
+    renderWithProviders(<PlanBillingPage checkoutPollingOverride={{ pollIntervalMs: 10, maxAttempts: 2 }} />);
+
+    await screen.findByRole('button', { name: /start checkout/i });
+    expect(screen.queryByText('Developer checkout simulator')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /start checkout/i }));
+    expect(await screen.findByText('Developer checkout simulator')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /simulate success/i }));
+
+    await waitFor(() => expect(simulationRequests).toHaveLength(1));
+    expect(simulationRequests[0].headers.get('Idempotency-Key')).toMatch(/^[A-Za-z0-9_-]{16,160}$/);
+    expect(simulationRequests[0].body).toEqual({
+      checkout_operation_id: '00000000-0000-4000-8000-000000000301',
+      requested_outcome: 'succeeded',
+    });
+    expect(await screen.findByText('Simulator outcome recorded: succeeded')).toBeInTheDocument();
+    expect(await screen.findByText('Checkout operation reached a terminal state')).toBeInTheDocument();
+
+    const text = document.body.textContent ?? '';
+    expect(text).not.toContain('provider_event_secret');
+    expect(text).not.toContain('fake_token_secret');
+    expect(text).not.toContain('checkout_ref_secret');
+    expect(text).not.toMatch(/payment successful|subscription activated|access granted/i);
+  });
+
+  it.each(['succeeded', 'failed'] as const)(
+    'keeps simulator controls enabled when checkout operation is %s',
+    async (operationStatus) => {
+      const options = checkoutFixture();
+      options.diagnostics.fake_checkout_simulation = {
+        available: true,
+        allowed_outcomes: ['pending', 'succeeded', 'failed'],
+        warning: 'Development test simulator.',
+      };
+
+      server.use(
+        http.get('*/api/v1/platform-billing/checkout-options', () => HttpResponse.json(options)),
+        http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+          HttpResponse.json({
+            operation_id: '00000000-0000-4000-8000-000000000501',
+            operation_status: 'succeeded',
+            checkout_session_reference: 'checkout_ref_secret',
+            fake_checkout_token: 'fake_token_secret',
+            expires_at: null,
+            confirmation_state: 'unconfirmed',
+            replayed: false,
+            browser_authoritative: false,
+          }, { status: 201 }),
+        ),
+        http.get('*/api/v1/platform-billing/checkout-operations/*', () =>
+          HttpResponse.json({
+            operation_id: '00000000-0000-4000-8000-000000000501',
+            operation_status: operationStatus,
+            checkout_session_reference: 'checkout_ref_secret',
+            expires_at: null,
+            error_code: operationStatus === 'failed' ? 'simulated_failure' : null,
+            browser_authoritative: false,
+          }),
+        ),
+      );
+
+      const PlanBillingPage = await loadPlanBillingPage(true, true, true);
+      renderWithProviders(<PlanBillingPage checkoutPollingOverride={{ pollIntervalMs: 10, maxAttempts: 2 }} />);
+
+      await userEvent.click(await screen.findByRole('button', { name: /start checkout/i }));
+      expect(await screen.findByText('Checkout operation reached a terminal state')).toBeInTheDocument();
+      expect(await screen.findByText('Developer checkout simulator')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /simulate pending/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /simulate success/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /simulate failure/i })).toBeEnabled();
+      expect(screen.queryByText(/simulator controls are disabled/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['pending', 'succeeded', 'failed'] as const)(
+    'submits %s simulation from a succeeded fake checkout operation',
+    async (requestedOutcome) => {
+      const options = checkoutFixture();
+      options.diagnostics.fake_checkout_simulation = {
+        available: true,
+        allowed_outcomes: ['pending', 'succeeded', 'failed'],
+        warning: 'Development test simulator.',
+      };
+      const simulationRequests: Array<Record<string, unknown>> = [];
+
+      server.use(
+        http.get('*/api/v1/platform-billing/checkout-options', () => HttpResponse.json(options)),
+        http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+          HttpResponse.json({
+            operation_id: '00000000-0000-4000-8000-000000000502',
+            operation_status: 'succeeded',
+            checkout_session_reference: 'checkout_ref_secret',
+            fake_checkout_token: 'fake_token_secret',
+            expires_at: null,
+            confirmation_state: 'unconfirmed',
+            replayed: false,
+            browser_authoritative: false,
+          }, { status: 201 }),
+        ),
+        http.get('*/api/v1/platform-billing/checkout-operations/*', () =>
+          HttpResponse.json({
+            operation_id: '00000000-0000-4000-8000-000000000502',
+            operation_status: 'succeeded',
+            checkout_session_reference: 'checkout_ref_secret',
+            expires_at: null,
+            error_code: null,
+            browser_authoritative: false,
+          }),
+        ),
+        http.post('*/api/v1/platform-billing/fake-checkout-simulations', async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          simulationRequests.push(body);
+          return HttpResponse.json({
+            simulation_operation_id: '00000000-0000-4000-8000-000000000503',
+            checkout_operation_id: '00000000-0000-4000-8000-000000000502',
+            outcome_status: `outcome_${requestedOutcome}`,
+            webhook_processing_status: requestedOutcome === 'pending' ? null : 'processed',
+            provider_event_reference: 'provider_event_secret',
+            replayed: false,
+            browser_authoritative: false,
+            subscription_activated: false,
+          }, { status: 201 });
+        }),
+      );
+
+      const PlanBillingPage = await loadPlanBillingPage(true, true, true);
+      renderWithProviders(<PlanBillingPage checkoutPollingOverride={{ pollIntervalMs: 10, maxAttempts: 2 }} />);
+
+      await userEvent.click(await screen.findByRole('button', { name: /start checkout/i }));
+      const label = requestedOutcome === 'succeeded' ? /simulate success/i : requestedOutcome === 'failed' ? /simulate failure/i : /simulate pending/i;
+      await userEvent.click(await screen.findByRole('button', { name: label }));
+
+      await waitFor(() => expect(simulationRequests).toHaveLength(1));
+      expect(simulationRequests[0]).toEqual({
+        checkout_operation_id: '00000000-0000-4000-8000-000000000502',
+        requested_outcome: requestedOutcome,
+      });
+      expect(await screen.findByText(`Simulator outcome recorded: ${requestedOutcome}`)).toBeInTheDocument();
+      const text = document.body.textContent ?? '';
+      expect(text).not.toContain('provider_event_secret');
+      expect(text).not.toContain('fake_token_secret');
+      expect(text).not.toContain('checkout_ref_secret');
+      expect(text).not.toMatch(/payment successful|subscription activated|access granted/i);
+    },
+  );
+
+  it('does not show fake simulator controls when the simulator flag or backend diagnostic is off', async () => {
+    const options = checkoutFixture();
+    options.diagnostics.fake_checkout_simulation = {
+      available: true,
+      allowed_outcomes: ['pending', 'succeeded', 'failed'],
+      warning: 'Development test simulator.',
+    };
+    server.use(http.get('*/api/v1/platform-billing/checkout-options', () => HttpResponse.json(options)));
+
+    const PlanBillingPage = await loadPlanBillingPage(true, true, false);
+    const disabledFlagView = renderWithProviders(<PlanBillingPage />);
+    await screen.findByRole('button', { name: /start checkout/i });
+    expect(screen.queryByText('Developer checkout simulator')).not.toBeInTheDocument();
+    disabledFlagView.unmount();
+
+    const disabledOptions = checkoutFixture();
+    disabledOptions.diagnostics.fake_checkout_simulation.available = false;
+    server.use(http.get('*/api/v1/platform-billing/checkout-options', () => HttpResponse.json(disabledOptions)));
+
+    const EnabledPage = await loadPlanBillingPage(true, true, true);
+    renderWithProviders(<EnabledPage />);
+    await screen.findAllByRole('button', { name: /start checkout/i });
+    expect(screen.queryByText('Developer checkout simulator')).not.toBeInTheDocument();
+  });
+
+  it('prevents duplicate fake simulation POSTs on rapid double-click', async () => {
+    const options = checkoutFixture();
+    options.diagnostics.fake_checkout_simulation = {
+      available: true,
+      allowed_outcomes: ['pending', 'succeeded', 'failed'],
+      warning: 'Development test simulator.',
+    };
+    let simulationPostCount = 0;
+    let resolveSimulation: () => void;
+    const pendingSimulation = new Promise<void>((resolve) => {
+      resolveSimulation = resolve;
+    });
+
+    server.use(
+      http.get('*/api/v1/platform-billing/checkout-options', () => HttpResponse.json(options)),
+      http.post('*/api/v1/platform-billing/checkout-sessions', () =>
+        HttpResponse.json({
+          operation_id: '00000000-0000-4000-8000-000000000401',
+          operation_status: 'pending',
+          checkout_session_reference: null,
+          fake_checkout_token: null,
+          expires_at: null,
+          confirmation_state: 'unconfirmed',
+          replayed: false,
+          browser_authoritative: false,
+        }, { status: 201 }),
+      ),
+      http.get('*/api/v1/platform-billing/checkout-operations/*', () =>
+        HttpResponse.json({
+          operation_id: '00000000-0000-4000-8000-000000000401',
+          operation_status: 'pending',
+          checkout_session_reference: null,
+          expires_at: null,
+          error_code: null,
+          browser_authoritative: false,
+        }),
+      ),
+      http.post('*/api/v1/platform-billing/fake-checkout-simulations', async () => {
+        simulationPostCount += 1;
+        await pendingSimulation;
+        return HttpResponse.json({
+          simulation_operation_id: '00000000-0000-4000-8000-000000000402',
+          checkout_operation_id: '00000000-0000-4000-8000-000000000401',
+          outcome_status: 'outcome_pending',
+          webhook_processing_status: null,
+          provider_event_reference: 'provider_event_secret',
+          replayed: false,
+          browser_authoritative: false,
+          subscription_activated: false,
+        }, { status: 201 });
+      }),
+    );
+
+    const PlanBillingPage = await loadPlanBillingPage(true, true, true);
+    renderWithProviders(<PlanBillingPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /start checkout/i }));
+    const simulateButton = await screen.findByRole('button', { name: /simulate pending/i });
+    fireEvent.pointerDown(simulateButton);
+    fireEvent.click(simulateButton);
+    fireEvent.pointerDown(simulateButton);
+    fireEvent.click(simulateButton);
+
+    await waitFor(() => expect(simulationPostCount).toBe(1));
+    resolveSimulation!();
   });
 
   it('does not render fake simulation controls, reconciliation controls or activation wording', async () => {

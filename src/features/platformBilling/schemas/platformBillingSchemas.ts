@@ -122,9 +122,15 @@ export const platformBillingCheckoutAvailabilitySchema = z.strictObject({
   action_code: z.literal("start_subscription"),
 });
 
+export const fakeCheckoutSimulationOutcomeSchema = z.enum([
+  "pending",
+  "succeeded",
+  "failed",
+]);
+
 export const fakeCheckoutSimulationAvailabilitySchema = z.strictObject({
   available: z.boolean(),
-  allowed_outcomes: z.array(z.enum(["pending", "succeeded", "failed"])),
+  allowed_outcomes: z.array(fakeCheckoutSimulationOutcomeSchema),
   warning: z.string(),
 });
 
@@ -186,6 +192,26 @@ export const getCheckoutOperationResponseSchema = z.strictObject({
   browser_authoritative: z.boolean(),
 });
 
+export const createFakeCheckoutSimulationRequestSchema = z.strictObject({
+  checkout_operation_id: z.string().uuid(),
+  requested_outcome: fakeCheckoutSimulationOutcomeSchema,
+});
+
+export const fakeCheckoutSimulationResponseSchema = z.strictObject({
+  simulation_operation_id: z.string().uuid(),
+  checkout_operation_id: z.string().uuid(),
+  outcome_status: z.enum([
+    "outcome_pending",
+    "outcome_succeeded",
+    "outcome_failed",
+  ]),
+  webhook_processing_status: z.string().nullable(),
+  provider_event_reference: z.string().nullable(),
+  replayed: z.boolean(),
+  browser_authoritative: z.boolean(),
+  subscription_activated: z.boolean(),
+});
+
 export type CreateCheckoutSessionRequest = z.infer<
   typeof createCheckoutSessionRequestSchema
 >;
@@ -194,4 +220,13 @@ export type CreateCheckoutSessionResponse = z.infer<
 >;
 export type GetCheckoutOperationResponse = z.infer<
   typeof getCheckoutOperationResponseSchema
+>;
+export type FakeCheckoutSimulationOutcome = z.infer<
+  typeof fakeCheckoutSimulationOutcomeSchema
+>;
+export type CreateFakeCheckoutSimulationRequest = z.infer<
+  typeof createFakeCheckoutSimulationRequestSchema
+>;
+export type FakeCheckoutSimulationResponse = z.infer<
+  typeof fakeCheckoutSimulationResponseSchema
 >;
