@@ -3,6 +3,7 @@ import React, { forwardRef } from 'react';
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  rightElement?: React.ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(({
@@ -11,6 +12,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   type = 'text',
   className = '',
   style,
+  rightElement,
   ...props
 }, ref) => {
   const containerStyle: React.CSSProperties = {
@@ -37,19 +39,27 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     outline: 'none',
     width: '100%',
     transition: 'border-color 0.15s, box-shadow 0.15s',
+    paddingRight: rightElement ? '40px' : '14px',
     ...style,
   };
 
   return (
     <div style={containerStyle} className="group">
       {label && <label style={labelStyle}>{label}</label>}
-      <input
-        ref={ref}
-        type={type}
-        style={inputStyle}
-        className={`focus:border-[var(--border-focus)] placeholder:text-[var(--text-placeholder)] text-[16px] md:text-[14px] ${error ? 'border-[var(--red)] focus:border-[var(--red)]' : ''} ${className}`}
-        {...props}
-      />
+      <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+        <input
+          ref={ref}
+          type={type}
+          style={inputStyle}
+          className={`focus:border-[var(--border-focus)] placeholder:text-[var(--text-placeholder)] text-[16px] md:text-[14px] ${error ? 'border-[var(--red)] focus:border-[var(--red)]' : ''} ${className}`}
+          {...props}
+        />
+        {rightElement && (
+          <div style={{ position: 'absolute', right: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {rightElement}
+          </div>
+        )}
+      </div>
       {error && <span className="text-[10px] text-[var(--red)] font-mono uppercase tracking-wider">{error}</span>}
     </div>
   );

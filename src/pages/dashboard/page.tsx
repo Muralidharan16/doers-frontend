@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useExpiringSubscriptions, useCollections, useAttendance } from '@/features/reports/hooks/useDashboard';
+import { useBranchStore } from '@/features/gym';
 import { Users, UserPlus, CreditCard, Calendar } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -8,9 +9,11 @@ export default function DashboardPage() {
     to: new Date().toISOString().split('T')[0],
   });
 
-  const expiringQuery = useExpiringSubscriptions(7);
-  const collectionsQuery = useCollections(dateRange.from, dateRange.to);
-  const attendanceQuery = useAttendance(30);
+  const { selectedBranch } = useBranchStore();
+
+  const expiringQuery = useExpiringSubscriptions(7, selectedBranch?.id);
+  const collectionsQuery = useCollections(dateRange.from, dateRange.to, selectedBranch?.id);
+  const attendanceQuery = useAttendance(30, selectedBranch?.id);
   console.log('Attendance data array:', attendanceQuery.data);
 
   const totalCollections = collectionsQuery.data?.reduce((sum, item) => sum + Number(item.total), 0) || 0;

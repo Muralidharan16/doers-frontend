@@ -9,18 +9,26 @@ export interface Registration {
 export interface OrganizationProfile {
     id: string;
     name: string;
+    business_type?: string;
     tagline?: string;
     description?: string;
     year_established?: number;
     website_url?: string;
     social_links: Record<string, string>;
     registrations: Registration[];
+    business_id?: string;
+    gst_number?: string;
+    pan_number?: string;
 }
 export interface OrganizationUpdatePayload {
     name?: string;
+    business_type?: string;
     tagline?: string;
     description?: string;
     year_established?: number;
     website_url?: string;
     social_links?: Record<string, string>;
+    business_id?: string;
+    gst_number?: string;
+    pan_number?: string;
 }

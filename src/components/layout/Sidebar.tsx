@@ -1,13 +1,18 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/features/auth';
+import { useBranchStore } from '@/features/gym';
 import { X, LayoutDashboard, Users, CreditCard, DollarSign, BarChart3, CalendarCheck, Building2, Settings, LogOut } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { assetService } from '@/lib/services/assetService';
+import { PLATFORM_BILLING_FRONTEND_SHELL } from '@/config/flags';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/members', label: 'Members', icon: Users },
-  { to: '/subscriptions', label: 'Subscriptions', icon: CreditCard },
-  { to: '/billing', label: 'Payments', icon: DollarSign },
+  { to: '/subscriptions', label: PLATFORM_BILLING_FRONTEND_SHELL ? 'Member Subscriptions' : 'Subscriptions', icon: CreditCard },
+  { to: '/billing', label: PLATFORM_BILLING_FRONTEND_SHELL ? 'Member Payments & Collections' : 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
   { to: '/gyms', label: 'Gyms', icon: Building2 },
@@ -21,11 +26,48 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const user = useAuthStore((s) => s.user);
+  const { selectedBranch, clearBranches } = useBranchStore();
+  const [logoThumbUrl, setLogoThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchLogo() {
+      try {
+        const data = await assetService.getLogoStatus();
+        if (isMounted && data.logo_thumb_url) {
+          setLogoThumbUrl(data.logo_thumb_url);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    fetchLogo();
+
+    const handleLogoUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<string | null>;
+      if (isMounted) {
+        setLogoThumbUrl(customEvent.detail);
+      }
+    };
+
+    window.addEventListener('logo-updated', handleLogoUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('logo-updated', handleLogoUpdate);
+    };
+  }, []);
 
   const handleLogout = () => {
     clearAuth();
+    clearBranches();
+    localStorage.removeItem('auth-storage');
+    localStorage.removeItem('branch-storage');
+    sessionStorage.removeItem('signup-email');
+    sessionStorage.removeItem('signup-poll-token');
+    queryClient.clear();
     navigate('/login', { replace: true });
     setIsOpen(false);
   };
@@ -100,7 +142,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                       className="transition-all duration-150" 
                       style={{ color: isActive ? 'var(--accent)' : 'var(--text-secondary)' }}
                     />
-                    <span className="text-[13px] tracking-[0.03em]">{item.label}</span>
+                    <span className="text-[13px] tracking-[0.03em] leading-tight min-w-0">{item.label}</span>
                   </div>
                 </>
               )}
@@ -112,18 +154,28 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       {/* Profile/Footer */}
       <div className="p-4 border-t border-[var(--border-default)]">
         <div className="flex items-center gap-3.5 mb-4 px-2">
-          <div 
-            className="w-8 h-8 rounded-full flex items-center justify-center font-sans text-white text-[12px] font-medium"
-            style={{ backgroundColor: 'var(--accent)' }}
-          >
-            {user?.name ? user.name.charAt(0).toUpperCase() : 'T'}
-          </div>
+          {logoThumbUrl ? (
+            <div className="w-8 h-8 rounded-full overflow-hidden border border-[var(--border-strong)] bg-white flex items-center justify-center flex-shrink-0">
+              <img 
+                src={logoThumbUrl} 
+                alt="Logo" 
+                className="w-full h-full object-cover" 
+              />
+            </div>
+          ) : (
+            <div 
+              className="w-8 h-8 rounded-full flex items-center justify-center font-sans text-white text-[12px] font-medium flex-shrink-0"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'T'}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium truncate leading-tight text-[var(--text-primary)]">
               {user?.name ? formatName(user.name) : 'Studio Owner'}
             </div>
             <div className="text-[11px] font-normal truncate text-[var(--text-muted)]">
-              Titan Fitness
+              {selectedBranch?.name || user?.organizationName || 'Studio Enterprise'}
             </div>
           </div>
         </div>

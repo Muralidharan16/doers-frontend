@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LoaderCircle, Mail } from 'lucide-react';
@@ -11,6 +11,7 @@ import { DoersLogo } from '@/components/ui/DoersLogo';
 
 interface CheckInboxLocationState {
   email?: string;
+  pollToken?: string;
 }
 
 export default function CheckInboxPage() {
@@ -23,22 +24,43 @@ export default function CheckInboxPage() {
     const queryEmail = new URLSearchParams(location.search).get('email');
     return stateEmail || queryEmail || sessionStorage.getItem('signup-email') || '';
   }, [location.search, location.state]);
+  const pollToken = useMemo(() => {
+    const statePollToken = (location.state as CheckInboxLocationState | null)?.pollToken;
+    return statePollToken || sessionStorage.getItem('signup-poll-token') || '';
+  }, [location.state]);
+
+  const [isPollingExpired, setIsPollingExpired] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsPollingExpired(true);
+    }, 10 * 60 * 1000); // 10 minutes
+    return () => clearTimeout(timer);
+  }, []);
 
   const resendMutation = useMutation({
     mutationFn: authApi.resendVerification,
+    onSuccess: () => {
+      // Reset the polling timer when resending email
+      setIsPollingExpired(false);
+    }
   });
 
   const signupStatusQuery = useQuery({
-    queryKey: ['signup-status', email],
-    queryFn: () => authApi.signupStatus(email),
-    enabled: Boolean(email),
-    refetchInterval: (query) => query.state.data?.status === 'verified' ? false : 2500,
+    queryKey: ['signup-status', email, pollToken],
+    queryFn: () => authApi.signupStatus(email, pollToken),
+    enabled: Boolean(email && pollToken),
+    refetchInterval: (query) => {
+      if (isPollingExpired) return false;
+      return query.state.data?.status === 'verified' ? false : 2500;
+    },
     refetchIntervalInBackground: true,
   });
 
   useEffect(() => {
     if (email) sessionStorage.setItem('signup-email', email);
-  }, [email]);
+    if (pollToken) sessionStorage.setItem('signup-poll-token', pollToken);
+  }, [email, pollToken]);
 
   useEffect(() => {
     if (signupStatusQuery.data?.status !== 'verified') return;
@@ -52,6 +74,8 @@ export default function CheckInboxPage() {
         { access_token, refresh_token },
         isCompleted
       );
+      sessionStorage.removeItem('signup-poll-token');
+      sessionStorage.removeItem('signup-email');
     }
     
     navigate(isCompleted ? '/dashboard' : '/onboarding', { replace: true });
@@ -119,8 +143,18 @@ export default function CheckInboxPage() {
                 gap: '8px'
               }}
             >
-              <LoaderCircle size={14} style={{ color: 'var(--accent)' }} className="animate-spin" />
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Listening for verification...</span>
+              {!pollToken ? (
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Signup session expired. Please sign up again.
+                </span>
+              ) : !isPollingExpired ? (
+                <>
+                  <LoaderCircle size={14} style={{ color: 'var(--accent)' }} className="animate-spin" />
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Listening for verification...</span>
+                </>
+              ) : (
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Verification link expired.</span>
+              )}
             </div>
 
             <div className="w-full space-y-4 pt-2">

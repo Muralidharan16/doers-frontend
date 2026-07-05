@@ -6,6 +6,7 @@ export interface PincodeLookupResponse {
 
 export interface CompleteOnboardingPayload {
   phone: string;
+  country_code: string;
   address_line1: string;
   address_line2?: string;
   city: string;

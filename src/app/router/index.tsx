@@ -2,6 +2,8 @@ import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-rou
 import { Suspense, lazy } from 'react';
 import { AuthGuard } from '@/shared/components/AuthGuard';
 import { TrialLockBanner } from '@/features/trial';
+import { PlatformBillingStatusBanner } from '@/features/platformBilling';
+import { PLATFORM_BILLING_FRONTEND_SHELL } from '@/config/flags';
 import DashboardLayout from '@/pages/_layouts/DashboardLayout';
 
 // Lazy load pages
@@ -13,6 +15,8 @@ const OnboardingPage = lazy(() => import('@/pages/onboarding/page'));
 const DashboardPage = lazy(() => import('@/pages/dashboard/page'));
 const SettingsPage = lazy(() => import('@/pages/settings/page'));
 const SubscriptionRequiredPage = lazy(() => import('@/pages/subscription-required/page'));
+const PlanBillingPage = lazy(() => import('@/features/platformBilling/pages/PlanBillingPage'));
+const BillingRecoveryPage = lazy(() => import('@/features/platformBilling/pages/BillingRecoveryPage'));
 
 // New screens lazy imports
 const MembersPage = lazy(() => import('@/pages/members/page'));
@@ -37,7 +41,7 @@ const Fallback = () => (
 // Root layout to include TrialLockBanner within Router context
 const RootLayout = () => (
   <>
-    <TrialLockBanner />
+    {PLATFORM_BILLING_FRONTEND_SHELL ? <PlatformBillingStatusBanner /> : <TrialLockBanner />}
     <Outlet />
   </>
 );
@@ -77,8 +81,26 @@ const router = createBrowserRouter([
       },
       {
         path: 'subscription-required',
-        element: <Suspense fallback={<Fallback />}><SubscriptionRequiredPage /></Suspense>,
+        element: PLATFORM_BILLING_FRONTEND_SHELL
+          ? <Navigate to="/billing-recovery" replace />
+          : <Suspense fallback={<Fallback />}><SubscriptionRequiredPage /></Suspense>,
       },
+      ...(PLATFORM_BILLING_FRONTEND_SHELL ? [
+        {
+          path: 'billing-recovery',
+          element: (
+            <AuthGuard>
+              <DashboardLayout />
+            </AuthGuard>
+          ),
+          children: [
+            {
+              index: true,
+              element: <Suspense fallback={<Fallback />}><BillingRecoveryPage /></Suspense>,
+            }
+          ]
+        },
+      ] : []),
       {
         path: 'dashboard',
         element: (
@@ -191,6 +213,22 @@ const router = createBrowserRouter([
           }
         ]
       },
+      ...(PLATFORM_BILLING_FRONTEND_SHELL ? [
+        {
+          path: 'settings/plan-billing',
+          element: (
+            <AuthGuard>
+              <DashboardLayout />
+            </AuthGuard>
+          ),
+          children: [
+            {
+              index: true,
+              element: <Suspense fallback={<Fallback />}><PlanBillingPage /></Suspense>,
+            }
+          ]
+        },
+      ] : []),
     ]
   }
 ]);
