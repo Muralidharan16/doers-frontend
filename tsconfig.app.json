@@ -13,6 +13,7 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "emitDeclarationOnly": true,
+    "declarationDir": "./node_modules/.tmp/declarations",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "paths": {
