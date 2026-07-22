@@ -136,16 +136,12 @@ export default function DashboardPage() {
                </div>
                <div className="mt-4 space-y-1">
                   <div className="text-[11px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-[0.08em]">Current Load</div>
-                  <div className="text-[32px] font-light text-[var(--text-primary)] leading-none">42%</div>
+                  <div className="text-[14px] font-medium text-[var(--text-muted)] leading-tight">Occupancy data unavailable</div>
                </div>
             </div>
             <div className="mt-6 space-y-2">
                <div className="flex justify-between items-center text-[11px] font-bold uppercase tracking-[0.08em]">
-                  <span className="text-[var(--text-muted)] font-normal">18 active members</span>
-                  <div className="px-[10px] py-[3px] bg-transparent border-[0.5px] border-[#4CAF50] rounded-[3px] text-[10px] font-medium text-[#4CAF50] tracking-[0.1em] uppercase">Stable load</div>
-               </div>
-               <div className="h-[1px] w-full bg-[var(--border-default)] overflow-hidden rounded-none">
-                  <div className="h-full bg-[var(--accent-gold)] w-[42%]" />
+                  <span className="text-[var(--text-muted)] font-normal normal-case">Occupancy reporting is not connected.</span>
                </div>
             </div>
          </div>
@@ -162,12 +158,11 @@ export default function DashboardPage() {
                </div>
                <div className="mt-4 space-y-1">
                   <div className="text-[11px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-[0.08em]">Check-ins Today</div>
-                  <div className="text-[32px] font-light text-[var(--text-primary)] leading-none">128</div>
+                  <div className="text-[14px] font-medium text-[var(--text-muted)] leading-tight">Member activity data unavailable</div>
                </div>
             </div>
              <div className="mt-6 flex items-center gap-2">
-                <div className="px-[10px] py-[3px] bg-transparent border-[0.5px] border-[#4CAF50] rounded-[3px] text-[10px] font-medium text-[#4CAF50] tracking-[0.1em] uppercase">+14%</div>
-                <span className="text-[11px] text-[var(--text-muted)] font-medium italic uppercase tracking-[0.08em]">vs previous Thursday</span>
+                <span className="text-[11px] text-[var(--text-muted)] font-medium italic">Check-in reporting is not connected.</span>
              </div>
           </div>
        </section>
@@ -217,13 +212,23 @@ export default function DashboardPage() {
                 <p className="text-[12px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-wide">Hourly density across historical peak windows</p>
               </div>
               <div className="px-[10px] py-[3px] bg-transparent border-[0.5px] rounded-[3px] text-[10px] font-medium tracking-[0.1em] uppercase" style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}>
-                 Live Heatmap
+                 Attendance distribution
               </div>
             </div>
             
-            {!attendanceQuery.data || !attendanceQuery.data.hours || attendanceQuery.data.hours.length === 0 ? (
+            {attendanceQuery.isPending || attendanceQuery.isLoading ? (
                <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                  Loading attendance data...
+                  Loading attendance distribution
+               </div>
+            ) : attendanceQuery.isError ? (
+               <div style={{ height: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  <span className="font-bold">Attendance distribution unavailable</span>
+                  <span className="mt-1">Attendance reporting could not be loaded.</span>
+               </div>
+            ) : !attendanceQuery.data || !attendanceQuery.data.hours || attendanceQuery.data.hours.length === 0 ? (
+               <div style={{ height: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  <span className="font-bold">No attendance distribution recorded</span>
+                  <span className="mt-1">No attendance activity was returned for the last 30 days.</span>
                </div>
             ) : (
                <div style={{ height: '200px', width: '100%' }}>
@@ -247,7 +252,7 @@ export default function DashboardPage() {
             )}
             
             <div className="mt-6 border-t pt-4 text-center" style={{ borderColor: 'var(--border-default)' }}>
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-[0.12em] font-semibold">Sensor signals healthy. Average studio dwell: 72 mins.</p>
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-[0.12em] font-semibold">Attendance distribution for the last 30 days.</p>
             </div>
           </div>
         </div>
@@ -268,7 +273,7 @@ export default function DashboardPage() {
                  {[
                    { label: 'Memberships Expiring', value: expiringQuery.data?.length || 0, status: 'warning', text: 'Action required in 72h' },
                    { label: 'Failed Payments', value: '—', status: 'ink-muted', text: 'Payment alerts unavailable' },
-                   { label: 'Low Attendance Alerts', value: 12, status: 'ink-muted', text: 'Review retention strategy' },
+                   { label: 'Low Attendance Alerts', value: '—', status: 'ink-muted', text: 'Attendance alerts unavailable' },
                  ].map((alert) => (
                     <div 
                       key={alert.label} 
@@ -303,12 +308,12 @@ export default function DashboardPage() {
               </div>
 
               <div className="mt-8 pt-6 border-t space-y-4" style={{ borderColor: 'var(--border-default)' }}>
-                 <div className="flex justify-between items-end">
-                    <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">Monthly Growth</span>
-                    <span className="text-[13px] font-bold text-[#4CAF50]">+18.4%</span>
-                 </div>
-                 <div className="h-[2px] w-full overflow-hidden" style={{ backgroundColor: 'var(--bg-page)' }}>
-                    <div className="h-full bg-[#4CAF50] w-[18.4%]" />
+                 <div className="space-y-1">
+                    <div className="flex justify-between items-end">
+                       <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">Monthly Growth</span>
+                       <span className="text-[11px] font-bold text-[var(--text-muted)]">Growth data unavailable</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)] font-normal italic">Growth reporting is not connected.</p>
                  </div>
                  <button 
                    className="w-full py-3.5 text-[10px] font-bold uppercase tracking-[0.25em] rounded-[6px] transition-all duration-200"
