@@ -187,32 +187,17 @@ export default function DashboardPage() {
             <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-default)' }}>
               <div className="space-y-1">
                 <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.12em]">Revenue Streams</div>
-                <div className="text-[10px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-[0.12em]">Historical Performance stream</div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-[0.12em]">Trend reporting is not connected.</div>
               </div>
               <div className="text-right space-y-1.5">
                 <div className="text-[28px] font-light text-[var(--text-primary)] leading-tight">₹{totalCollections.toLocaleString('en-IN')}</div>
-                <div className="inline-block px-[10px] py-[3px] bg-transparent border-[0.5px] rounded-[3px] text-[10px] font-medium tracking-[0.1em] uppercase" style={{ borderColor: 'var(--border-strong)', color: 'var(--text-secondary)' }}>On Track (+4.2%)</div>
+                <div className="inline-block px-[10px] py-[3px] bg-transparent border-[0.5px] rounded-[3px] text-[10px] font-medium tracking-[0.1em] uppercase" style={{ borderColor: 'var(--border-strong)', color: 'var(--text-secondary)' }}>Revenue trend unavailable</div>
               </div>
             </div>
             
             <div className="p-6">
-              <div className="relative h-56 w-full pl-8" style={{ outline: 'none' }}>
-                 <div className="absolute inset-0 pl-8 grid grid-cols-12 divide-x pointer-events-none" style={{ borderColor: 'var(--border-default)', opacity: 0.2 }} />
-                 <div className="relative h-full flex items-end gap-[4px]">
-                    {Array(50).fill(0).map((_, i) => (
-                       <div key={i} className="flex-1 group relative h-full flex items-end">
-                          <div 
-                            className="w-full transition-all duration-300 rounded-[1px] relative overflow-hidden" 
-                            style={{ 
-                              height: `${30 + Math.random() * 70}%`,
-                              backgroundColor: 'var(--accent-gold)'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-gold-dark)'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-gold)'}
-                          />
-                       </div>
-                    ))}
-                 </div>
+              <div className="relative h-56 w-full pl-8 flex items-center justify-center text-[var(--text-muted)] text-[12px]" style={{ outline: 'none' }}>
+                Revenue visualization unavailable
               </div>
               <div className="mt-6 pl-8 flex justify-between text-[var(--text-muted)] font-bold text-[11px] tracking-[0.1em] uppercase opacity-80">
                  <span>T-Minus 30 Days</span>
@@ -282,7 +267,7 @@ export default function DashboardPage() {
               <div className="space-y-4 flex-1">
                  {[
                    { label: 'Memberships Expiring', value: expiringQuery.data?.length || 0, status: 'warning', text: 'Action required in 72h' },
-                   { label: 'Failed Payments', value: 3, status: 'critical', text: 'Retry automated at 00:00' },
+                   { label: 'Failed Payments', value: '—', status: 'ink-muted', text: 'Payment alerts unavailable' },
                    { label: 'Low Attendance Alerts', value: 12, status: 'ink-muted', text: 'Review retention strategy' },
                  ].map((alert) => (
                     <div 
