@@ -83,15 +83,13 @@ export default function DashboardPage() {
                </div>
                <div className="mt-4 space-y-1">
                   <div className="text-[11px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-[0.08em]">Current Plan</div>
-                  <div className="text-[32px] font-light text-[var(--text-primary)] leading-tight">Professional Operating Plan</div>
-                  <div className="text-[11px] text-[var(--accent-gold)] font-bold uppercase tracking-[0.06em]">8 Trial Days Remaining</div>
+                  <div className="text-[14px] font-medium text-[var(--text-muted)] leading-tight">Trial and plan details unavailable</div>
                </div>
             </div>
             <div className="mt-6 space-y-2">
-               <div className="h-[1px] w-full bg-[var(--border-default)] overflow-hidden rounded-none">
-                  <div className="h-full bg-[var(--accent-gold)] w-[70%]" />
+               <div className="flex justify-between items-center text-[11px] font-bold uppercase tracking-[0.08em]">
+                  <span className="text-[var(--text-muted)] font-normal normal-case">Trial and subscription-plan reporting are not connected.</span>
                </div>
-               <div className="text-[11px] text-[var(--text-muted)] font-semibold uppercase tracking-[0.08em]">Trial progression verified</div>
             </div>
          </div>
 
@@ -107,20 +105,13 @@ export default function DashboardPage() {
                </div>
                <div className="mt-4 space-y-1">
                   <div className="text-[11px] text-[var(--text-muted)] mt-[4px] font-normal uppercase tracking-[0.08em]">Renewal Schedule</div>
-                  <div className="text-[32px] font-light text-[var(--text-primary)] leading-tight">₹12,500 <span className="text-[14px] text-[var(--text-muted)] font-light lowercase">/ mo</span></div>
-                  <div className="text-[11px] text-[var(--text-muted)] font-semibold mt-1 uppercase tracking-[0.08em]">Auto-renewing June 12, 2026</div>
+                  <div className="text-[14px] font-medium text-[var(--text-muted)] leading-tight">Subscription details unavailable</div>
                </div>
             </div>
-            <div className="mt-6 flex items-center justify-between">
-               <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#4CAF50]" />
-                  <span className="text-[11px] font-bold text-[var(--text-primary)] uppercase tracking-[0.08em]">Active Autopay</span>
+            <div className="mt-6 space-y-2">
+               <div className="flex justify-between items-center text-[11px] font-bold uppercase tracking-[0.08em]">
+                  <span className="text-[var(--text-muted)] font-normal normal-case">Plan pricing, renewal, and autopay reporting are not connected.</span>
                </div>
-               <button 
-                 className="text-[11px] font-bold text-[var(--accent-gold)] uppercase tracking-[0.06em] bg-transparent border-none outline-none cursor-pointer"
-                 onMouseEnter={(e) => e.currentTarget.style.opacity = '0.88'}
-                 onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-               >Details</button>
             </div>
          </div>
 

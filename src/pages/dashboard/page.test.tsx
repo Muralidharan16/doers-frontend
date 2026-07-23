@@ -74,12 +74,23 @@ describe("DashboardPage", () => {
     expect(within(alertsRow).getByText("Attendance alerts unavailable")).toBeInTheDocument();
 
     // B3 content remains present
-    expect(screen.getByText("8 Trial Days Remaining")).toBeInTheDocument();
-    expect(screen.getByText("Trial progression verified")).toBeInTheDocument();
-    expect(screen.getByText("₹12,500")).toBeInTheDocument();
-    expect(screen.getByText("/ mo")).toBeInTheDocument();
-    expect(screen.getByText("Auto-renewing June 12, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Active Autopay")).toBeInTheDocument();
+    const systemConditionCard = screen.getByText("System Condition").closest(".rounded-\\[8px\\]") as HTMLElement;
+    expect(within(systemConditionCard).getByText("Trial and plan details unavailable")).toBeInTheDocument();
+    expect(within(systemConditionCard).getByText("Trial and subscription-plan reporting are not connected.")).toBeInTheDocument();
+    expect(within(systemConditionCard).queryByText("8 Trial Days Remaining")).not.toBeInTheDocument();
+    expect(within(systemConditionCard).queryByText("Trial progression verified")).not.toBeInTheDocument();
+    expect(within(systemConditionCard).queryByText("Professional Operating Plan")).not.toBeInTheDocument();
+
+    const subHealthCard = screen.getByText("Subscription Health").closest(".rounded-\\[8px\\]") as HTMLElement;
+    expect(within(subHealthCard).getByText("Subscription details unavailable")).toBeInTheDocument();
+    expect(within(subHealthCard).getByText("Plan pricing, renewal, and autopay reporting are not connected.")).toBeInTheDocument();
+    expect(within(subHealthCard).queryByText("₹12,500 / mo")).not.toBeInTheDocument();
+    expect(within(subHealthCard).queryByText("₹12,500")).not.toBeInTheDocument();
+    expect(within(subHealthCard).queryByText("12,500")).not.toBeInTheDocument();
+    expect(within(subHealthCard).queryByText("Auto-renewing June 12, 2026")).not.toBeInTheDocument();
+    expect(within(subHealthCard).queryByText("June 12, 2026")).not.toBeInTheDocument();
+    expect(within(subHealthCard).queryByText("Active Autopay")).not.toBeInTheDocument();
+    expect(within(subHealthCard).queryByRole("button", { name: /Details/i })).not.toBeInTheDocument();
 
     // Representative deferred claims remain present
     expect(screen.getByText("System Condition")).toBeInTheDocument();
