@@ -1,13 +1,35 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 import GymsPage from "./page";
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("GymsPage", () => {
-  it("renders truthful empty states and does not render fabricated gyms", () => {
+  it("renders truthful registration and listing unavailable states", () => {
     render(<GymsPage />);
-    
+
+    expect(screen.getByText("Gyms & Facilities")).toBeInTheDocument();
+    expect(screen.getByText("Facility registration unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Facility creation and provisioning are not connected on this page.")).toBeInTheDocument();
     expect(screen.getByText("Facility data unavailable")).toBeInTheDocument();
     expect(screen.getByText("Facility listing is not connected.")).toBeInTheDocument();
+  });
+
+  it("does not render active facility registration controls", () => {
+    render(<GymsPage />);
+
+    expect(screen.queryByRole("button", { name: "Add Gym" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add Gym" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Register Establishment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Register Establishment" })).not.toBeInTheDocument();
+  });
+
+  it("does not invoke browser prompts or fabricate facility records", () => {
+    const prompt = vi.spyOn(window, "prompt");
+
+    render(<GymsPage />);
 
     expect(screen.queryByText("No establishments registered")).not.toBeInTheDocument();
     expect(screen.queryByText("Titan Fitness Principal")).not.toBeInTheDocument();
@@ -16,19 +38,9 @@ describe("GymsPage", () => {
     expect(screen.queryByText("540 University Ave, Palo Alto, CA")).not.toBeInTheDocument();
     expect(screen.queryByText("₹18,500")).not.toBeInTheDocument();
     expect(screen.queryByText("₹11,200")).not.toBeInTheDocument();
-  });
-
-  it("does not fabricate a facility record from the add control", () => {
-    const prompt = vi.spyOn(window, "prompt")
-      .mockReturnValueOnce("Test Facility Should Not Render")
-      .mockReturnValueOnce("Test Address Should Not Render");
-
-    render(<GymsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Add Gym" }));
-
-    expect(prompt).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("Test Facility Should Not Render")).not.toBeInTheDocument();
     expect(screen.queryByText("Test Address Should Not Render")).not.toBeInTheDocument();
-    expect(screen.getByText("Facility data unavailable")).toBeInTheDocument();
+
+    expect(prompt).not.toHaveBeenCalled();
   });
 });

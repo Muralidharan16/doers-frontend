@@ -1,26 +1,18 @@
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Plus, MapPin, Building2 } from 'lucide-react';
+import { MapPin, Building2 } from 'lucide-react';
 
 export default function GymsPage() {
-  const handleAddGym = () => {
-    const name = prompt("Enter new gym/studio name:");
-    if (!name) return;
-    const location = prompt("Enter location address:");
-    if (!location) return;
-  };
-
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader 
         title="Gyms & Facilities" 
         category="Infrastructure" 
         action={
-          <Button variant="primary" onClick={handleAddGym} className="gap-2">
-            <Plus size={14} />
-            <span>Add Gym</span>
-          </Button>
+          <div className="flex flex-col items-end text-right">
+            <span className="text-[13px] font-semibold text-[var(--text-primary)]">Facility registration unavailable</span>
+            <span className="text-[11px] text-[var(--text-muted)]">Facility creation and provisioning are not connected on this page.</span>
+          </div>
         }
       />
 
@@ -67,9 +59,6 @@ export default function GymsPage() {
               Facility listing is not connected.
             </p>
           </div>
-          <Button variant="primary" onClick={handleAddGym}>
-            Register Establishment
-          </Button>
         </Card>
       </div>
     </div>
