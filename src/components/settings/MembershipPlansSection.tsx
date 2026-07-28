@@ -19,7 +19,7 @@ export const MembershipPlansSection: React.FC = () => {
   const [editingPlan, setEditingPlan] = useState<MembershipPlan | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [loadingAction, setLoadingAction] = useState<{ planId: string; action: 'archive' | 'activate' | 'deactivate' } | null>(null);
 
   // Queries & Mutations
   const { data: plans = [], isLoading, error: fetchError } = useMembershipPlans();
@@ -72,7 +72,7 @@ export const MembershipPlansSection: React.FC = () => {
 
   const handleArchive = async (planId: string) => {
     setActionError(null);
-    setLoadingAction(planId);
+    setLoadingAction({ planId, action: 'archive' });
     try {
       await archiveMutation.mutateAsync(planId);
     } catch (err: unknown) {
@@ -80,8 +80,9 @@ export const MembershipPlansSection: React.FC = () => {
       const errorMsg =
         (typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : null) ||
         e?.message ||
-        'Failed to archive plan';
+        'The membership plan could not be updated. Please try again.';
       setActionError(errorMsg);
+      throw new Error(errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -89,7 +90,7 @@ export const MembershipPlansSection: React.FC = () => {
 
   const handleActivate = async (planId: string) => {
     setActionError(null);
-    setLoadingAction(planId);
+    setLoadingAction({ planId, action: 'activate' });
     try {
       await activateMutation.mutateAsync(planId);
     } catch (err: unknown) {
@@ -106,7 +107,7 @@ export const MembershipPlansSection: React.FC = () => {
 
   const handleDeactivate = async (planId: string) => {
     setActionError(null);
-    setLoadingAction(planId);
+    setLoadingAction({ planId, action: 'deactivate' });
     try {
       await deactivateMutation.mutateAsync(planId);
     } catch (err: unknown) {
@@ -114,8 +115,9 @@ export const MembershipPlansSection: React.FC = () => {
       const errorMsg =
         (typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : null) ||
         e?.message ||
-        'Failed to deactivate plan';
+        'The membership plan could not be updated. Please try again.';
       setActionError(errorMsg);
+      throw new Error(errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -187,7 +189,7 @@ export const MembershipPlansSection: React.FC = () => {
               onArchive={handleArchive}
               onActivate={handleActivate}
               onDeactivate={handleDeactivate}
-              isLoading={loadingAction === plan.id}
+              pendingAction={loadingAction?.planId === plan.id ? loadingAction.action : null}
             />
           ))}
         </div>

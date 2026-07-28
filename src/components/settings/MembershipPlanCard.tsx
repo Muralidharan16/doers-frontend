@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Edit2, Archive, Power, Calendar, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import type { MembershipPlan, MembershipPlanStatus } from '@/features/gym/types/membershipPlans';
 
 interface MembershipPlanCardProps {
@@ -9,7 +10,7 @@ interface MembershipPlanCardProps {
   onArchive: (planId: string) => Promise<void>;
   onActivate: (planId: string) => Promise<void>;
   onDeactivate: (planId: string) => Promise<void>;
-  isLoading?: boolean;
+  pendingAction?: 'archive' | 'activate' | 'deactivate' | null;
 }
 
 const getStatusBadgeVariant = (status: MembershipPlanStatus): 'healthy' | 'warning' | 'muted' => {
@@ -83,28 +84,67 @@ export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({
   onArchive,
   onActivate,
   onDeactivate,
-  isLoading = false,
+  pendingAction = null,
 }) => {
-  const handleArchive = async () => {
-    if (!window.confirm('Are you sure you want to archive this plan? It will no longer be available for new members.')) {
-      return;
-    }
-    await onArchive(plan.id);
+  const [confirmationAction, setConfirmationAction] = useState<'archive' | 'deactivate' | null>(null);
+  const [confirmationError, setConfirmationError] = useState<string | null>(null);
+  const [localPendingAction, setLocalPendingAction] = useState<'archive' | 'deactivate' | null>(null);
+  const archiveTriggerRef = useRef<HTMLButtonElement>(null);
+  const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
+  const isPlanActionPending = pendingAction !== null || localPendingAction !== null;
+  const isArchivePending = pendingAction === 'archive' || localPendingAction === 'archive';
+  const isDeactivatePending = pendingAction === 'deactivate' || localPendingAction === 'deactivate';
+
+  const openConfirmation = (action: 'archive' | 'deactivate') => {
+    setConfirmationError(null);
+    setConfirmationAction(action);
   };
 
   const handleActivate = async () => {
     await onActivate(plan.id);
   };
 
-  const handleDeactivate = async () => {
-    if (!window.confirm('Deactivating this plan will hide it from new member admissions. Continue?')) {
-      return;
+  const handleConfirmationCancel = () => {
+    if (localPendingAction || pendingAction) return;
+    setConfirmationAction(null);
+    setConfirmationError(null);
+  };
+
+  const handleConfirmationConfirm = async () => {
+    if (!confirmationAction || localPendingAction || pendingAction) return;
+
+    const action = confirmationAction;
+    setLocalPendingAction(action);
+    setConfirmationError(null);
+
+    try {
+      if (action === 'archive') {
+        await onArchive(plan.id);
+      } else {
+        await onDeactivate(plan.id);
+      }
+      setConfirmationError(null);
+      setConfirmationAction(null);
+    } catch (error) {
+      setConfirmationError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'The membership plan could not be updated. Please try again.'
+      );
+    } finally {
+      setLocalPendingAction(null);
     }
-    await onDeactivate(plan.id);
   };
 
   const isArchived = plan.status === 'archived';
   const isActive = plan.status === 'active';
+  const isArchiveConfirmation = confirmationAction === 'archive';
+  const confirmationTitle = isArchiveConfirmation ? 'Archive membership plan' : 'Deactivate membership plan';
+  const confirmationDescription = `${isArchiveConfirmation ? 'Archive' : 'Deactivate'} “${plan.name}”?`;
+  const confirmationCancelLabel = isArchiveConfirmation ? 'Keep plan' : 'Keep active';
+  const confirmationConfirmLabel = isArchiveConfirmation ? 'Archive plan' : 'Deactivate plan';
+  const confirmationPendingLabel = isArchiveConfirmation ? 'Archiving…' : 'Deactivating…';
+  const confirmationPending = isArchiveConfirmation ? isArchivePending : isDeactivatePending;
 
   return (
     <div className="p-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] transition-colors">
@@ -181,7 +221,7 @@ export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({
           <>
             <button
               onClick={() => onEdit(plan)}
-              disabled={isLoading}
+              disabled={isPlanActionPending}
               className="flex-1 px-3 py-1.5 rounded text-[12px] font-medium flex items-center justify-center gap-1.5 bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--border-strong)] transition-colors disabled:opacity-50"
             >
               <Edit2 size={13} /> Edit
@@ -189,8 +229,9 @@ export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({
             
             {isActive ? (
               <button
-                onClick={handleDeactivate}
-                disabled={isLoading}
+                ref={deactivateTriggerRef}
+                onClick={() => openConfirmation('deactivate')}
+                disabled={isPlanActionPending}
                 className="flex-1 px-3 py-1.5 rounded text-[12px] font-medium flex items-center justify-center gap-1.5 bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--border-strong)] transition-colors disabled:opacity-50"
               >
                 <Power size={13} /> Deactivate
@@ -198,7 +239,7 @@ export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({
             ) : (
               <button
                 onClick={handleActivate}
-                disabled={isLoading}
+                disabled={isPlanActionPending}
                 className="flex-1 px-3 py-1.5 rounded text-[12px] font-medium flex items-center justify-center gap-1.5 bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--border-strong)] transition-colors disabled:opacity-50"
               >
                 <Power size={13} /> Activate
@@ -206,8 +247,9 @@ export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({
             )}
             
             <button
-              onClick={handleArchive}
-              disabled={isLoading}
+              ref={archiveTriggerRef}
+              onClick={() => openConfirmation('archive')}
+              disabled={isPlanActionPending}
               className="flex-1 px-3 py-1.5 rounded text-[12px] font-medium flex items-center justify-center gap-1.5 bg-[var(--bg-hover)] text-[var(--red)] hover:bg-[var(--red)]/10 transition-colors disabled:opacity-50"
             >
               <Archive size={13} /> Archive
@@ -221,6 +263,20 @@ export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({
           </div>
         )}
       </div>
+      <ConfirmationDialog
+        open={confirmationAction !== null}
+        title={confirmationTitle}
+        description={confirmationDescription}
+        cancelLabel={confirmationCancelLabel}
+        confirmLabel={confirmationConfirmLabel}
+        pendingLabel={confirmationPendingLabel}
+        destructive
+        pending={confirmationPending}
+        error={confirmationError}
+        triggerRef={isArchiveConfirmation ? archiveTriggerRef : deactivateTriggerRef}
+        onCancel={handleConfirmationCancel}
+        onConfirm={handleConfirmationConfirm}
+      />
     </div>
   );
 };
