@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Calendar, DollarSign, Users, BarChart3, TrendingUp, Download } from 'lucide-react';
+import { Calendar, DollarSign, Users, TrendingUp, Download } from 'lucide-react';
 
 const REPORT_CARDS = [
   { id: 'revenue', title: 'Revenue Report', description: 'Analyze monthly recurring subscriptions, check-in charges, and tax registries.', icon: DollarSign },
@@ -15,20 +15,16 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState('2026-05-01');
   const [endDate, setEndDate] = useState('2026-05-31');
 
-  const handleGenerateReport = () => {
-    alert(`Generating system report from ${startDate} to ${endDate}...`);
-  };
-
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader 
         title="Reports & Analytics" 
         category="Intelligence" 
         action={
-          <Button variant="primary" onClick={handleGenerateReport} className="gap-2">
-            <BarChart3 size={14} />
-            <span>Generate Report</span>
-          </Button>
+          <div className="flex flex-col items-end text-right">
+            <span className="text-[13px] font-semibold text-[var(--text-primary)]">Report generation unavailable</span>
+            <span className="text-[11px] text-[var(--text-muted)]">Report generation and export are not connected.</span>
+          </div>
         }
       />
 

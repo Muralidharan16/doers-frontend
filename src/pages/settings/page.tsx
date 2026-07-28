@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BasicInfoForm } from '@/features/organization';
 import { OrganizationBrandingSection } from '@/components/settings/OrganizationBrandingSection';
-import { User, Shield, Bell, CreditCard, Building, ArrowRight, AlertTriangle, MapPin, Ticket } from 'lucide-react';
+import { User, CreditCard, Building, ArrowRight, MapPin, Ticket } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -16,43 +16,12 @@ const TABS = [
   { id: 'branches', label: 'Locations & Branches', icon: MapPin },
   { id: 'membership-plans', label: 'Membership Plans', icon: Ticket },
   { id: 'billing', label: 'Plan & Billing', icon: CreditCard },
-  { id: 'security', label: 'Security & Access', icon: Shield },
-  { id: 'notifications', label: 'Communication', icon: Bell },
   { id: 'profile', label: 'Preferences & Theme', icon: User },
 ];
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('basic');
   
-  // Custom switch states for demonstration
-  const [emailAlerts, setEmailAlerts] = useState(true);
-  const [twoFactor, setTwoFactor] = useState(false);
-  const [marketing, setMarketing] = useState(true);
-
-  const renderToggleSwitch = (value: boolean, onChange: (v: boolean) => void) => {
-    return (
-      <button 
-        type="button"
-        onClick={() => onChange(!value)}
-        className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-        style={{ 
-          backgroundColor: value ? 'var(--accent)' : 'var(--border-strong)',
-          minWidth: '44px',
-          minHeight: '44px',
-          display: 'flex',
-          alignItems: 'center',
-        }}
-      >
-        <span 
-          className="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-          style={{ 
-            transform: value ? 'translateX(24px)' : 'translateX(4px)' 
-          }}
-        />
-      </button>
-    );
-  };
-
   return (
     <div className="space-y-8 animate-fade-in">
       <PageHeader 
@@ -129,49 +98,6 @@ export default function SettingsPage() {
                   </div>
                   <ThemeToggle />
                 </div>
-
-                {/* Row 2: email alerts */}
-                <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                  <div className="space-y-0.5">
-                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">Email Alerts</div>
-                    <div className="text-[11px] text-[var(--text-muted)]">Get daily summaries of check-ins and billing activity.</div>
-                  </div>
-                  {renderToggleSwitch(emailAlerts, setEmailAlerts)}
-                </div>
-
-                {/* Row 3: marketing */}
-                <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                  <div className="space-y-0.5">
-                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">Product Updates</div>
-                    <div className="text-[11px] text-[var(--text-muted)]">Receive tips, feature announcements, and product updates.</div>
-                  </div>
-                  {renderToggleSwitch(marketing, setMarketing)}
-                </div>
-              </Card>
-
-              {/* Danger Zone */}
-              <div className="text-[10px] tracking-[0.12em] text-[var(--text-muted)] uppercase font-semibold pt-4">
-                DANGER ZONE
-              </div>
-              <Card 
-                style={{ 
-                  border: '0.5px solid rgba(226,75,74,0.3)', 
-                  backgroundColor: 'var(--bg-surface)' 
-                }}
-                className="flex flex-col md:flex-row md:items-center justify-between gap-6"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-[var(--red)] font-semibold text-[13px]">
-                    <AlertTriangle size={16} />
-                    <span>Delete Gym</span>
-                  </div>
-                  <p className="text-[11px] text-[var(--text-muted)] max-w-lg">
-                    Permanently delete your gym, including all members, check-ins, and billing history. This cannot be undone.
-                  </p>
-                </div>
-                <Button variant="danger" onClick={() => alert('Are you sure? This action is permanent.')}>
-                  Delete Gym
-                </Button>
               </Card>
             </div>
           )}
@@ -185,43 +111,6 @@ export default function SettingsPage() {
                 <PlanBillingPage embedded />
               ) : (
                 <Card className="divide-y divide-[var(--border-default)]">
-                  {activeTab === 'security' && (
-                    <>
-                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                        <div className="space-y-0.5">
-                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Two-Factor Authentication</div>
-                          <div className="text-[11px] text-[var(--text-muted)]">Secure your staff logins with multi-factor passcodes.</div>
-                        </div>
-                        {renderToggleSwitch(twoFactor, setTwoFactor)}
-                      </div>
-                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                        <div className="space-y-0.5">
-                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Auto Sign-Out</div>
-                          <div className="text-[11px] text-[var(--text-muted)]">Automatically sign out after 15 minutes of inactivity.</div>
-                        </div>
-                        {renderToggleSwitch(true, () => {})}
-                      </div>
-                    </>
-                  )}
-
-                  {activeTab === 'notifications' && (
-                    <>
-                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                        <div className="space-y-0.5">
-                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Push Check-in Notifications</div>
-                          <div className="text-[11px] text-[var(--text-muted)]">Receive immediate alerts when members check in.</div>
-                        </div>
-                        {renderToggleSwitch(true, () => {})}
-                      </div>
-                      <div className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                        <div className="space-y-0.5">
-                          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Payment Failure Alerts</div>
-                          <div className="text-[11px] text-[var(--text-muted)]">Get notified when a member's payment fails.</div>
-                        </div>
-                        {renderToggleSwitch(true, () => {})}
-                      </div>
-                    </>
-                  )}
 
                   {activeTab === 'billing' && (
                     <>
