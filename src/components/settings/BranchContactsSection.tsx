@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { Phone, Mail, Star, Edit2, Trash2, Plus, AlertCircle, Loader2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { 
   getBranchContacts, 
   createBranchContact, 
@@ -46,6 +47,10 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
   const [editingContact, setEditingContact] = useState<BranchContact | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedContactForDeletion, setSelectedContactForDeletion] = useState<BranchContact | null>(null);
+  const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null);
+  const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const { register, handleSubmit, reset, control } = useForm<BranchContactFormValues>({
     defaultValues: {
@@ -79,7 +84,7 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchContacts(false);
+    fetchContacts();
   }, [fetchContacts]);
 
   const handleOpenForm = (contact?: BranchContact) => {
@@ -170,14 +175,67 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     }
   };
 
-  const handleDelete = async (contactId: string) => {
-    if (!window.confirm('Are you sure you want to delete this contact?')) return;
+  const getContactIdentifier = (contact: BranchContact | null) => {
+    if (!contact) return 'this contact';
+    return (
+      contact.email_normalized?.trim() ||
+      contact.email?.trim() ||
+      contact.phone_e164?.trim() ||
+      contact.phone_number?.trim() ||
+      contact.contact_label?.trim() ||
+      'this contact'
+    );
+  };
+
+  const normalizeDeleteError = (err: unknown) => {
+    const e = err as { response?: { data?: { detail?: unknown } }, message?: unknown };
+    const detail = e?.response?.data?.detail;
+
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const firstMessage = detail.find((item): item is { msg: string } => (
+        typeof item === 'object' &&
+        item !== null &&
+        'msg' in item &&
+        typeof (item as { msg?: unknown }).msg === 'string' &&
+        Boolean((item as { msg: string }).msg.trim())
+      ));
+      if (firstMessage) return firstMessage.msg;
+    }
+    if (typeof e?.message === 'string' && e.message.trim()) return e.message;
+
+    return 'The branch contact could not be deleted. Please try again.';
+  };
+
+  const handleOpenDeleteDialog = (contact: BranchContact, trigger: HTMLButtonElement) => {
+    if (deletingContactId) return;
+    deleteTriggerRef.current = trigger;
+    setDeleteDialogError(null);
+    setSelectedContactForDeletion(contact);
+  };
+
+  const handleCancelDelete = () => {
+    if (deletingContactId) return;
+    setSelectedContactForDeletion(null);
+    setDeleteDialogError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedContactForDeletion || deletingContactId) return;
+
+    const contactId = selectedContactForDeletion.id;
+    setDeletingContactId(contactId);
+    setDeleteDialogError(null);
+
     try {
       await deleteBranchContact(branchId, contactId);
       await fetchContacts();
+      setSelectedContactForDeletion(null);
+      setDeleteDialogError(null);
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      alert(e?.response?.data?.detail || 'Failed to delete contact');
+      setDeleteDialogError(normalizeDeleteError(err));
+    } finally {
+      setDeletingContactId(null);
     }
   };
 
@@ -270,9 +328,10 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
                     <Edit2 size={13} />
                   </button>
                   <button 
-                    onClick={() => handleDelete(contact.id)}
+                    onClick={(event) => handleOpenDeleteDialog(contact, event.currentTarget)}
                     title="Delete Contact"
-                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--bg-hover)] rounded"
+                    disabled={!!deletingContactId}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--bg-hover)] rounded disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Trash2 size={13} />
                   </button>
@@ -302,6 +361,21 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
           ))}
         </div>
       )}
+
+      <ConfirmationDialog
+        open={!!selectedContactForDeletion}
+        title="Delete branch contact"
+        description={'Delete “' + getContactIdentifier(selectedContactForDeletion) + '” from this branch?'}
+        cancelLabel="Keep contact"
+        confirmLabel="Delete contact"
+        pendingLabel="Deleting…"
+        destructive
+        pending={!!deletingContactId}
+        error={deleteDialogError}
+        triggerRef={deleteTriggerRef}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
 
       {/* Inline Form Modal */}
       {isFormOpen && (
