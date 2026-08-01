@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import { AlertTriangle, Edit2, Plus, Search, Trash2, UserMinus, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
 import {
@@ -85,6 +86,46 @@ const getInitials = (name: string): string =>
 
 const formatMemberNumber = (member: Member): string =>
   Number.isFinite(member.member_number) ? String(member.member_number) : 'Not assigned';
+
+const getMemberRemovalIdentifier = (member: Member): string => {
+  const name = member.name.trim();
+  if (name) return name;
+
+  const email = member.email?.trim();
+  if (email) return email;
+
+  const displayCode = member.member_display_code?.trim();
+  if (displayCode) return displayCode;
+
+  if (Number.isFinite(member.member_number)) return `Member No. ${member.member_number}`;
+
+  const phone = member.phone.trim();
+  if (phone) return phone;
+
+  return 'this member';
+};
+
+const memberRemovalFallbackError = 'The member could not be removed from active members. Please try again.';
+
+const getMemberRemovalErrorMessage = (error: unknown): string => {
+  if (error && typeof error === 'object') {
+    const response = 'response' in error ? error.response : undefined;
+    if (response && typeof response === 'object' && 'data' in response) {
+      const data = response.data;
+      if (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string') {
+        const detail = data.detail.trim();
+        if (detail) return detail;
+      }
+    }
+
+    if ('message' in error && typeof error.message === 'string') {
+      const message = error.message.trim();
+      if (message) return message;
+    }
+  }
+
+  return memberRemovalFallbackError;
+};
 
 const titleCase = (value: string): string =>
   value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
@@ -217,6 +258,9 @@ export default function MembersPage() {
   const [form, setForm] = useState<MemberFormState>(emptyFormState);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedMemberForRemoval, setSelectedMemberForRemoval] = useState<Member | null>(null);
+  const [removalDialogError, setRemovalDialogError] = useState<string | null>(null);
+  const removalTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!orgId) return;
@@ -271,6 +315,10 @@ export default function MembersPage() {
   const totalMembers = membersQuery.data?.total ?? 0;
   const activeMembers = members.filter((member) => member.status === 'active').length;
   const inactiveMembers = members.filter((member) => member.status !== 'active').length;
+  const isMemberRemovalPending = deleteMember.isPending;
+  const selectedMemberRemovalIdentifier = selectedMemberForRemoval
+    ? getMemberRemovalIdentifier(selectedMemberForRemoval)
+    : 'this member';
 
   const openCreateForm = () => {
     setFormMode('create');
@@ -363,16 +411,35 @@ export default function MembersPage() {
     }
   };
 
-  const handleDelete = async (member: Member) => {
-    const confirmed = window.confirm(`Archive ${member.name}? They will disappear from the default active list.`);
-    if (!confirmed) return;
+  const openMemberRemovalDialog = (
+    member: Member,
+    event: MouseEvent<HTMLElement>
+  ) => {
+    if (isMemberRemovalPending) return;
+    removalTriggerRef.current = event.currentTarget;
+    setSelectedMemberForRemoval(member);
+    setRemovalDialogError(null);
+    setSuccessMessage(null);
+  };
 
+  const closeMemberRemovalDialog = () => {
+    if (isMemberRemovalPending) return;
+    setSelectedMemberForRemoval(null);
+    setRemovalDialogError(null);
+  };
+
+  const confirmMemberRemoval = async () => {
+    if (!selectedMemberForRemoval || isMemberRemovalPending) return;
+
+    setRemovalDialogError(null);
     setSuccessMessage(null);
     try {
-      await deleteMember.mutateAsync(member.id);
-      setSuccessMessage('Member archived successfully.');
+      await deleteMember.mutateAsync(selectedMemberForRemoval.id);
+      setSuccessMessage('Member removed from active members.');
+      setSelectedMemberForRemoval(null);
     } catch (error) {
-      setFormError(getApiErrorMessage(error, 'Unable to archive member. Please try again.'));
+      setRemovalDialogError(getMemberRemovalErrorMessage(error));
+      throw error;
     }
   };
 
@@ -554,9 +621,10 @@ export default function MembersPage() {
                           <Edit2 size={15} />
                         </button>
                         <button
-                          onClick={() => handleDelete(member)}
-                          className="p-2 text-[var(--text-muted)] hover:text-[var(--red)] rounded-md transition-colors"
-                          title="Archive member"
+                          onClick={(event) => openMemberRemovalDialog(member, event)}
+                          className="p-2 text-[var(--text-muted)] hover:text-[var(--red)] rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Remove from active members"
+                          disabled={isMemberRemovalPending}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -629,11 +697,12 @@ export default function MembersPage() {
                   </Button>
                   <Button
                     variant="ghost"
-                    onClick={() => handleDelete(member)}
-                    className="text-[12px] p-2 hover:text-[var(--red)]"
+                    onClick={(event) => openMemberRemovalDialog(member, event)}
+                    className="text-[12px] p-2 hover:text-[var(--red)] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isMemberRemovalPending}
                   >
                     <Trash2 size={14} />
-                    Archive
+                    Remove from active members
                   </Button>
                 </div>
               </Card>
@@ -641,6 +710,21 @@ export default function MembersPage() {
           </div>
         </>
       )}
+
+      <ConfirmationDialog
+        open={Boolean(selectedMemberForRemoval)}
+        title="Remove member from active list"
+        description={`Remove “${selectedMemberRemovalIdentifier}” from active members? They will no longer appear in the default active-member list.`}
+        confirmLabel="Remove from active members"
+        pendingLabel="Removing…"
+        cancelLabel="Keep active"
+        destructive
+        pending={isMemberRemovalPending}
+        error={removalDialogError}
+        triggerRef={removalTriggerRef}
+        onCancel={closeMemberRemovalDialog}
+        onConfirm={confirmMemberRemoval}
+      />
 
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
