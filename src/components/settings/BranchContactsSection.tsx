@@ -51,6 +51,7 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
   const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null);
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const formSubmittingRef = useRef(false);
 
   const { register, handleSubmit, reset, control } = useForm<BranchContactFormValues>({
     defaultValues: {
@@ -67,6 +68,7 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
   });
 
   const selectedKind = useWatch({ control, name: 'contact_kind' });
+  const isContactFormSaving = isSubmitting;
 
   const fetchContacts = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -88,6 +90,8 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
   }, [fetchContacts]);
 
   const handleOpenForm = (contact?: BranchContact) => {
+    if (formSubmittingRef.current || isSubmitting) return;
+
     setFormError(null);
     if (contact) {
       setEditingContact(contact);
@@ -123,17 +127,26 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     setIsFormOpen(true);
   };
 
-  const closeForm = () => {
+  const resetFormState = () => {
     setIsFormOpen(false);
     setEditingContact(null);
     setFormError(null);
   };
 
+  const closeForm = () => {
+    if (formSubmittingRef.current || isSubmitting) return;
+    resetFormState();
+  };
+
   const onSubmit = async (data: BranchContactFormValues) => {
+    if (formSubmittingRef.current) return;
+
+    formSubmittingRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
     
     try {
+      const submittedEditingContact = editingContact;
       const payload: Partial<CreateBranchContactPayload> = {
         contact_kind: data.contact_kind,
         contact_label: data.contact_label,
@@ -154,13 +167,13 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
         payload.email = data.email;
       }
 
-      if (editingContact) {
-        await updateBranchContact(branchId, editingContact.id, payload as UpdateBranchContactPayload);
+      if (submittedEditingContact) {
+        await updateBranchContact(branchId, submittedEditingContact.id, payload as UpdateBranchContactPayload);
       } else {
         await createBranchContact(branchId, payload as CreateBranchContactPayload);
       }
       
-      closeForm();
+      resetFormState();
       await fetchContacts();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: unknown } }, message?: string };
@@ -171,6 +184,7 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
         'Failed to save contact'
       );
     } finally {
+      formSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -270,7 +284,12 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     <div className="mt-1">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] text-[var(--text-muted)]">Phone numbers and emails for this branch</p>
-        <Button variant="secondary" onClick={() => handleOpenForm()} className="h-7 text-[11px] gap-1.5 px-3 flex-shrink-0">
+        <Button
+          variant="secondary"
+          onClick={() => handleOpenForm()}
+          disabled={isContactFormSaving}
+          className="h-7 text-[11px] gap-1.5 px-3 flex-shrink-0"
+        >
           <Plus size={12} /> Add Contact
         </Button>
       </div>
@@ -323,7 +342,8 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
                   <button 
                     onClick={() => handleOpenForm(contact)}
                     title="Edit Contact"
-                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded"
+                    disabled={isContactFormSaving}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Edit2 size={13} />
                   </button>
@@ -491,10 +511,10 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
               )}
 
               <div className="flex justify-end gap-3 pt-5 mt-2">
-                <Button type="button" variant="ghost" onClick={closeForm}>Cancel</Button>
+                <Button type="button" variant="ghost" onClick={closeForm} disabled={isSubmitting}>Cancel</Button>
                 <Button type="submit" variant="primary" disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 size={14} className="animate-spin mr-2 inline" /> : null}
-                  {editingContact ? 'Save Changes' : 'Add Contact'}
+                  {isSubmitting ? 'Saving…' : editingContact ? 'Save Changes' : 'Add Contact'}
                 </Button>
               </div>
             </form>

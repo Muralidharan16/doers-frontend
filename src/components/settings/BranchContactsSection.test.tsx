@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BranchContactsSection } from './BranchContactsSection';
@@ -50,6 +50,7 @@ function deferred<T>() {
 }
 
 function arrangeContacts(contacts: BranchContact[] = [phoneContact, emailContact]) {
+  Object.values(apiMocks).forEach((mock) => mock.mockReset());
   apiMocks.getBranchContacts.mockResolvedValue(contacts);
   apiMocks.createBranchContact.mockResolvedValue(undefined);
   apiMocks.updateBranchContact.mockResolvedValue(undefined);
@@ -61,6 +62,226 @@ async function renderSection() {
   render(<BranchContactsSection branchId="branch_1" />);
   await screen.findByText('+919876543210');
 }
+
+
+function getContactForm() {
+  screen.getByRole('heading', { name: /Branch Contact/ });
+  const form = document.querySelector('form');
+  if (!form) throw new Error('Branch contact form not found');
+  return form;
+}
+
+async function openAddContactForm() {
+  const user = userEvent.setup();
+  await renderSection();
+  await user.click(screen.getByRole('button', { name: 'Add Contact' }));
+  return { user, form: getContactForm() };
+}
+
+async function fillAddPhoneForm(form: HTMLElement, user: ReturnType<typeof userEvent.setup>) {
+  await user.clear(within(form).getByPlaceholderText('e.g. Front Desk'));
+  await user.type(within(form).getByPlaceholderText('e.g. Front Desk'), 'Front Desk Updated');
+  await user.clear(within(form).getByPlaceholderText('9876543210'));
+  await user.type(within(form).getByPlaceholderText('9876543210'), '9123456780');
+}
+
+describe('BranchContactsSection create/update form submission', () => {
+  beforeEach(() => {
+    arrangeContacts();
+  });
+
+  it('opens the add-contact form without creating a contact', async () => {
+    const { form } = await openAddContactForm();
+
+    expect(screen.getByRole('heading', { name: 'Add Branch Contact' })).toBeInTheDocument();
+    expect(within(form).getByRole('button', { name: 'Add Contact' })).toBeEnabled();
+    expect(apiMocks.createBranchContact).not.toHaveBeenCalled();
+    expect(apiMocks.updateBranchContact).not.toHaveBeenCalled();
+  });
+
+  it('cancels an idle add-contact form without mutation', async () => {
+    const { user, form } = await openAddContactForm();
+    await user.click(within(form).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('heading', { name: 'Add Branch Contact' })).not.toBeInTheDocument();
+    expect(apiMocks.createBranchContact).not.toHaveBeenCalled();
+    expect(apiMocks.updateBranchContact).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Add Contact' }));
+    const reopenedForm = getContactForm();
+    expect(within(reopenedForm).queryByText('Failed to save contact')).not.toBeInTheDocument();
+    expect(within(reopenedForm).getByRole('button', { name: 'Add Contact' })).toBeEnabled();
+  });
+
+  it('creates a branch contact once with the exact branch and submitted payload', async () => {
+    const { user, form } = await openAddContactForm();
+    await fillAddPhoneForm(form, user);
+
+    await user.click(within(form).getByRole('button', { name: 'Add Contact' }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Add Branch Contact' })).not.toBeInTheDocument());
+    expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(1);
+    expect(apiMocks.createBranchContact).toHaveBeenCalledWith('branch_1', expect.objectContaining({
+      contact_kind: 'phone',
+      contact_label: 'Front Desk Updated',
+      visibility_scope: 'public',
+      is_primary: false,
+      phone_number: '9123456780',
+      country_code: 'IN',
+      channel_capabilities: expect.objectContaining({ whatsapp: true, sms: true, voice: true, fax: false }),
+    }));
+    expect(apiMocks.updateBranchContact).not.toHaveBeenCalled();
+    expect(apiMocks.getBranchContacts).toHaveBeenCalledTimes(2);
+  });
+
+  it('updates the selected branch contact once with its exact identifiers', async () => {
+    const user = userEvent.setup();
+    await renderSection();
+
+    await user.click(screen.getAllByTitle('Edit Contact')[1]);
+    const form = getContactForm();
+    await user.clear(within(form).getByPlaceholderText('e.g. Front Desk'));
+    await user.type(within(form).getByPlaceholderText('e.g. Front Desk'), 'Manager Desk');
+
+    await user.click(within(form).getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit Branch Contact' })).not.toBeInTheDocument());
+    expect(apiMocks.updateBranchContact).toHaveBeenCalledTimes(1);
+    expect(apiMocks.updateBranchContact).toHaveBeenCalledWith('branch_1', 'contact_email', expect.objectContaining({
+      contact_kind: 'email',
+      contact_label: 'Manager Desk',
+      visibility_scope: 'internal',
+      is_primary: false,
+      email: 'manager@example.com',
+    }));
+    expect(apiMocks.createBranchContact).not.toHaveBeenCalled();
+    expect(apiMocks.getBranchContacts).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains add-contact values and error UI when creation fails', async () => {
+    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    apiMocks.createBranchContact.mockRejectedValueOnce(new Error('Create failed'));
+
+    await renderSection();
+    await user.click(screen.getByRole('button', { name: 'Add Contact' }));
+    const form = getContactForm();
+    await fillAddPhoneForm(form, user);
+    await user.click(within(form).getByRole('button', { name: 'Add Contact' }));
+
+    expect(await screen.findByText('Create failed')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Add Branch Contact' })).toBeInTheDocument();
+    expect(within(form).getByPlaceholderText('e.g. Front Desk')).toHaveValue('Front Desk Updated');
+    expect(within(form).getByPlaceholderText('9876543210')).toHaveValue('9123456780');
+    expect(within(form).getByRole('button', { name: 'Add Contact' })).toBeEnabled();
+    expect(within(form).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    expect(alertSpy).not.toHaveBeenCalled();
+
+    apiMocks.createBranchContact.mockResolvedValueOnce(undefined);
+    await user.click(within(form).getByRole('button', { name: 'Add Contact' }));
+    await waitFor(() => expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(2));
+  });
+
+  it('retains the selected edit workflow when contact update fails', async () => {
+    const user = userEvent.setup();
+    apiMocks.updateBranchContact.mockRejectedValueOnce({ response: { data: { detail: 'Update refused' } } });
+
+    await renderSection();
+    await user.click(screen.getAllByTitle('Edit Contact')[1]);
+    const form = getContactForm();
+    await user.clear(within(form).getByPlaceholderText('e.g. Front Desk'));
+    await user.type(within(form).getByPlaceholderText('e.g. Front Desk'), 'Manager Desk');
+    await user.click(within(form).getByRole('button', { name: 'Save Changes' }));
+
+    expect(await screen.findByText('Update refused')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Edit Branch Contact' })).toBeInTheDocument();
+    expect(within(form).getByPlaceholderText('e.g. Front Desk')).toHaveValue('Manager Desk');
+    expect(within(form).getByPlaceholderText('contact@branch.com')).toHaveValue('manager@example.com');
+    expect(within(form).getByRole('button', { name: 'Save Changes' })).toBeEnabled();
+    expect(apiMocks.updateBranchContact).toHaveBeenCalledWith('branch_1', 'contact_email', expect.any(Object));
+    expect(apiMocks.createBranchContact).not.toHaveBeenCalled();
+  });
+
+  it('blocks duplicate save submissions and cancellation while contact save is pending', async () => {
+    const user = userEvent.setup();
+    const createRequest = deferred<void>();
+    apiMocks.createBranchContact.mockReturnValueOnce(createRequest.promise);
+
+    await renderSection();
+    await user.click(screen.getByRole('button', { name: 'Add Contact' }));
+    const form = getContactForm();
+    await fillAddPhoneForm(form, user);
+
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(1));
+    expect(within(form).getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(within(form).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add Contact' })).toBeDisabled();
+    screen.getAllByTitle('Edit Contact').forEach((trigger) => {
+      expect(trigger).toBeDisabled();
+    });
+
+    await user.click(within(form).getByRole('button', { name: 'Saving…' }));
+    await user.click(screen.getAllByTitle('Edit Contact')[1]);
+    expect(screen.getByRole('heading', { name: 'Add Branch Contact' })).toBeInTheDocument();
+    expect(within(form).getByPlaceholderText('e.g. Front Desk')).toHaveValue('Front Desk Updated');
+    expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(1);
+
+    createRequest.resolve();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Add Branch Contact' })).not.toBeInTheDocument());
+    expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears a stale save error before opening a different contact workflow', async () => {
+    const user = userEvent.setup();
+    apiMocks.createBranchContact.mockRejectedValueOnce(new Error('First save failed'));
+
+    await renderSection();
+    await user.click(screen.getByRole('button', { name: 'Add Contact' }));
+    let form = getContactForm();
+    await fillAddPhoneForm(form, user);
+    await user.click(within(form).getByRole('button', { name: 'Add Contact' }));
+    expect(await screen.findByText('First save failed')).toBeVisible();
+
+    await user.click(within(form).getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getAllByTitle('Edit Contact')[1]);
+    form = getContactForm();
+
+    expect(within(form).queryByText('First save failed')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Edit Branch Contact' })).toBeInTheDocument();
+    expect(within(form).getByPlaceholderText('e.g. Front Desk')).toHaveValue('Manager');
+    expect(within(form).getByPlaceholderText('contact@branch.com')).toHaveValue('manager@example.com');
+  });
+
+  it('closes after successful contact save and shows the safe section error when refresh fails', async () => {
+    const user = userEvent.setup();
+    apiMocks.getBranchContacts
+      .mockResolvedValueOnce([phoneContact, emailContact])
+      .mockRejectedValueOnce(new Error('Contacts could not be refreshed'));
+    apiMocks.createBranchContact.mockResolvedValueOnce(undefined);
+
+    render(<BranchContactsSection branchId="branch_1" />);
+    await screen.findByText('+919876543210');
+    await user.click(screen.getByRole('button', { name: 'Add Contact' }));
+    const form = getContactForm();
+    await fillAddPhoneForm(form, user);
+    await user.click(within(form).getByRole('button', { name: 'Add Contact' }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Add Branch Contact' })).not.toBeInTheDocument());
+    expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(1);
+    expect(apiMocks.createBranchContact).toHaveBeenCalledWith('branch_1', expect.any(Object));
+    expect(apiMocks.updateBranchContact).not.toHaveBeenCalled();
+    expect(apiMocks.getBranchContacts).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Failed to save contact')).not.toBeInTheDocument();
+    expect(screen.queryByText('Create failed')).not.toBeInTheDocument();
+    expect(screen.getByText('Contacts could not be refreshed')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Add Contact' })).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Edit Contact')).not.toBeInTheDocument();
+    expect(apiMocks.createBranchContact).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('BranchContactsSection delete confirmation', () => {
   beforeEach(() => {
