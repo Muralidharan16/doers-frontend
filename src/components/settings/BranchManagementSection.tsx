@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -6,6 +6,7 @@ import { MapPin, Building2, Plus, Edit2, Trash2, Mail, Phone, Hash, AlertTriangl
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import {
   getAuthTokenPayload,
   fetchBranches,
@@ -59,6 +60,8 @@ export const BranchManagementSection: React.FC = () => {
   
   // Custom API Integration States
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
+  const [selectedBranchForRemoval, setSelectedBranchForRemoval] = useState<Branch | null>(null);
+  const [branchRemovalDialogError, setBranchRemovalDialogError] = useState<string | null>(null);
   const [transitioningBranchIds, setTransitioningBranchIds] = useState<Set<string>>(new Set());
   const [failedStep, setFailedStep] = useState<'gym' | 'address' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -70,7 +73,6 @@ export const BranchManagementSection: React.FC = () => {
   });
 
   // Confirmation Modals State
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Branch | null>(null);
   const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState<{ branch: Branch, newStatus: string } | null>(null);
   const [showDecommissionConfirm, setShowDecommissionConfirm] = useState<{ branch: Branch, newStatus: string } | null>(null);
   const [maintenanceReason, setMaintenanceReason] = useState<string>("");
@@ -78,6 +80,8 @@ export const BranchManagementSection: React.FC = () => {
   const [decommissionEffectiveDate, setDecommissionEffectiveDate] = useState<string>("");
 
   const pollingIntervals = React.useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const branchRemovalTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const branchRemovalSubmittingRef = useRef(false);
 
   // Role permissions checks
   const canAddBranch = userRole === 'owner';
@@ -146,6 +150,35 @@ export const BranchManagementSection: React.FC = () => {
       if (showLoading) setIsLoading(false);
     }
   }, [handleApiError]);
+
+  const getBranchRemovalIdentifier = (branch: Branch | null) => {
+    const name = branch?.name?.trim();
+    if (name) return name;
+
+    const code = branch?.gymu_id?.trim() || branch?.internal_code?.trim() || branch?.id?.trim();
+    return code || 'this branch';
+  };
+
+  const normalizeBranchRemovalError = (err: unknown) => {
+    const fallback = 'The branch could not be removed from the active list. Please try again.';
+    const e = err as { response?: { data?: { detail?: unknown } }, message?: unknown };
+    const detail = e?.response?.data?.detail;
+
+    if (Array.isArray(detail)) {
+      const firstMessage = detail.find((item): item is { msg: string } => (
+        typeof item === 'object' &&
+        item !== null &&
+        'msg' in item &&
+        typeof (item as { msg?: unknown }).msg === 'string' &&
+        Boolean((item as { msg: string }).msg.trim())
+      ));
+      if (firstMessage) return firstMessage.msg;
+    }
+
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (typeof e?.message === 'string' && e.message.trim()) return e.message;
+    return fallback;
+  };
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -247,6 +280,8 @@ export const BranchManagementSection: React.FC = () => {
   };
 
   const handleStatusChange = (branch: Branch, newStatus: string) => {
+    if (branchRemovalSubmittingRef.current || deletingBranchId !== null) return;
+
     setBlockedTransitionError(null);
     const oldStatus = branch.status.toUpperCase();
     const targetStatus = newStatus.toUpperCase();
@@ -350,6 +385,8 @@ export const BranchManagementSection: React.FC = () => {
   };
 
   const openNewForm = () => {
+    if (branchRemovalSubmittingRef.current || deletingBranchId !== null) return;
+
     reset({
       internal_code: generateNextInternalCode(),
       status: 'ACTIVE'
@@ -358,6 +395,8 @@ export const BranchManagementSection: React.FC = () => {
   };
 
   const openEdit = (branch: Branch) => {
+    if (branchRemovalSubmittingRef.current || deletingBranchId !== null) return;
+
     setEditingId(branch.id);
     reset({
       name: branch.name,
@@ -382,24 +421,57 @@ export const BranchManagementSection: React.FC = () => {
     reset({ status: 'ACTIVE' });
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!showDeleteConfirm) return;
-    const gymId = showDeleteConfirm.id;
-    setDeletingBranchId(gymId);
-    setShowDeleteConfirm(null);
-    setFormError(null);
+  const handleOpenBranchRemoval = (
+    branch: Branch,
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    if (branchRemovalSubmittingRef.current || deletingBranchId !== null) return;
+
+    branchRemovalTriggerRef.current = event.currentTarget;
+    setSelectedBranchForRemoval(branch);
+    setBranchRemovalDialogError(null);
+  };
+
+  const handleCancelBranchRemoval = () => {
+    if (branchRemovalSubmittingRef.current || deletingBranchId !== null) return;
+
+    setSelectedBranchForRemoval(null);
+    setBranchRemovalDialogError(null);
+  };
+
+  const handleConfirmBranchRemoval = async () => {
+    if (
+      !selectedBranchForRemoval ||
+      branchRemovalSubmittingRef.current ||
+      deletingBranchId !== null
+    ) {
+      return;
+    }
+
+    const submittedBranch = selectedBranchForRemoval;
+    const submittedBranchId = submittedBranch.id;
+    branchRemovalSubmittingRef.current = true;
+    setDeletingBranchId(submittedBranchId);
+    setBranchRemovalDialogError(null);
 
     try {
       // REPLACED: was setBranches(branches.filter(b => b.id !== id))
       // NOW: calls real API DELETE /gyms/{gym_id}
-      await deleteBranch(gymId);
+      await deleteBranch(submittedBranchId);
+      setBranches((currentBranches) =>
+        currentBranches.filter((branch) => branch.id !== submittedBranchId),
+      );
+      setSelectedBranchForRemoval(null);
       await handleFetchBranches();
     } catch (err: unknown) {
-      handleApiError(err);
+      setBranchRemovalDialogError(normalizeBranchRemovalError(err));
     } finally {
+      branchRemovalSubmittingRef.current = false;
       setDeletingBranchId(null);
     }
   };
+
+  const branchRemovalDescription = `Mark “${getBranchRemovalIdentifier(selectedBranchForRemoval)}” inactive and remove it from the active branch list? This action cannot be undone from this screen.`;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -430,7 +502,7 @@ export const BranchManagementSection: React.FC = () => {
               </p>
             </div>
             {canAddBranch && (
-              <Button variant="primary" onClick={openNewForm} className="gap-2">
+              <Button variant="primary" onClick={openNewForm} disabled={deletingBranchId !== null} className="gap-2">
                 <Plus size={14} /> Add Branch
               </Button>
             )}
@@ -473,7 +545,7 @@ export const BranchManagementSection: React.FC = () => {
                         {canTransitionToDecommissioned || canTransitionToMaintenance ? (
                           <select
                             value={branch.status}
-                            disabled={isLocked}
+                            disabled={isLocked || deletingBranchId !== null}
                             onChange={(e) => handleStatusChange(branch, e.target.value)}
                             className="text-[12px] bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                           >
@@ -490,6 +562,7 @@ export const BranchManagementSection: React.FC = () => {
                           {canEditBranch && (
                             <button
                               onClick={() => openEdit(branch)}
+                              disabled={deletingBranchId !== null}
                               className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md hover:bg-[var(--bg-hover)]"
                             >
                               <Edit2 size={14} />
@@ -497,8 +570,9 @@ export const BranchManagementSection: React.FC = () => {
                           )}
                           {canDeleteBranch && (
                             <button
-                              onClick={() => setShowDeleteConfirm(branch)}
-                              disabled={deletingBranchId === branch.id}
+                              onClick={(event) => handleOpenBranchRemoval(branch, event)}
+                              disabled={deletingBranchId !== null}
+                              title="Remove from active branches"
                               className="p-1.5 text-[var(--text-muted)] hover:text-[var(--red)] transition-colors rounded-md hover:bg-[var(--bg-hover)]"
                             >
                               <Trash2 size={14} />
@@ -711,32 +785,20 @@ export const BranchManagementSection: React.FC = () => {
         </Card>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full p-6 space-y-6 animate-scale-up border-[var(--border-strong)]">
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                <AlertTriangle className="text-[var(--red)]" size={20} />
-                Delete Branch
-              </h3>
-              <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">
-                Are you sure? This will soft-delete the branch and cannot be undone from the UI.
-              </p>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="ghost" onClick={() => setShowDeleteConfirm(null)}>Cancel</Button>
-              <Button
-                variant="primary"
-                className="bg-[var(--red)] hover:bg-[var(--red)]/90 border-transparent text-white"
-                onClick={handleDeleteConfirm}
-              >
-                Confirm Delete
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <ConfirmationDialog
+        open={selectedBranchForRemoval !== null}
+        title="Remove branch from active list"
+        description={branchRemovalDescription}
+        confirmLabel="Remove branch"
+        pendingLabel="Removing…"
+        cancelLabel="Keep branch"
+        destructive
+        pending={deletingBranchId !== null}
+        error={branchRemovalDialogError}
+        triggerRef={branchRemovalTriggerRef}
+        onCancel={handleCancelBranchRemoval}
+        onConfirm={handleConfirmBranchRemoval}
+      />
 
       {/* Maintenance Transition Modal */}
       {showMaintenanceConfirm && (
