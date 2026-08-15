@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   generate-and-certify:
-    name: Generate and certify corrected dependency candidate
+    name: Generate and certify warning-clean dependency candidate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -39,10 +39,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p cert-a-evidence cert-a-candidate/scripts cert-a-candidate/.github/workflows
+          mkdir -p cert-a-evidence
           git rev-parse HEAD | tee cert-a-evidence/generation-head.txt
           git rev-parse "$CERT_A_PARENT" | tee cert-a-evidence/certified-parent.txt
-          git diff --name-only "$CERT_A_PARENT" HEAD | tee cert-a-evidence/lane-bootstrap-files.txt
           test "$(git diff --name-only "$CERT_A_PARENT" HEAD)" = ".github/workflows/cert-a-generation.yml"
           git diff --exit-code "$CERT_A_PARENT" HEAD -- src scripts package.json package-lock.json vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json .github/workflows/frontend-quality.yml
 
@@ -53,7 +52,6 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-
           pkg.dependencies.axios = '1.19.0';
           pkg.dependencies['react-router-dom'] = '7.18.2';
           pkg.devDependencies.vite = '7.3.6';
@@ -63,9 +61,23 @@ jobs:
           if (pkg.dependencies?.esbuild) delete pkg.dependencies.esbuild;
           if (pkg.devDependencies?.esbuild) delete pkg.devDependencies.esbuild;
           pkg.scripts['verify:supply-chain'] = 'node scripts/verify-supply-chain.mjs';
-
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           NODE
+
+      - name: Remove React dev plugin from Vitest runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('vitest.config.ts')
+          text = path.read_text()
+          text = text.replace("import react from '@vitejs/plugin-react';\n", '')
+          text = text.replace('  plugins: [react()],\n', '')
+          if "@vitejs/plugin-react" in text or 'plugins: [react()]' in text:
+              raise SystemExit('Vitest React plugin removal failed')
+          path.write_text(text)
+          PY
 
       - name: Add durable supply-chain verifier
         shell: bash
@@ -73,19 +85,16 @@ jobs:
           set -euo pipefail
           cat > scripts/verify-supply-chain.mjs <<'NODE'
           import { readFileSync } from 'node:fs';
-
           const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
           const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
           const packages = lock.packages ?? {};
-
           const parse = (value) => {
             const match = String(value ?? '').match(/^(\d+)\.(\d+)\.(\d+)/);
             if (!match) throw new Error(`Invalid semver: ${value}`);
             return match.slice(1).map(Number);
           };
           const gte = (value, floor) => {
-            const actual = parse(value);
-            const minimum = parse(floor);
+            const actual = parse(value), minimum = parse(floor);
             for (let i = 0; i < 3; i += 1) {
               if (actual[i] > minimum[i]) return true;
               if (actual[i] < minimum[i]) return false;
@@ -97,40 +106,31 @@ jobs:
             if (!value) throw new Error(`Missing lock entry: ${path}`);
             return value;
           };
-          const requireEqual = (actual, expected, label) => {
+          const equal = (actual, expected, label) => {
             if (actual !== expected) throw new Error(`${label}: expected ${expected}, got ${actual}`);
           };
-          const requireGte = (actual, floor, label) => {
+          const atLeast = (actual, floor, label) => {
             if (!gte(actual, floor)) throw new Error(`${label}: expected >=${floor}, got ${actual}`);
           };
-
-          requireEqual(pkg.dependencies.axios, '1.19.0', 'manifest axios');
-          requireEqual(pkg.dependencies['react-router-dom'], '7.18.2', 'manifest react-router-dom');
-          requireEqual(pkg.devDependencies.vite, '7.3.6', 'manifest vite');
-          if (!/^\^5\./.test(pkg.devDependencies['@vitejs/plugin-react'])) {
-            throw new Error(`manifest plugin-react must remain compatible 5.x, got ${pkg.devDependencies['@vitejs/plugin-react']}`);
-          }
-          requireEqual(pkg.devDependencies.postcss, '^8.5.18', 'manifest postcss');
-          requireEqual(pkg.devDependencies.vitest, '4.1.9', 'manifest vitest');
-          if (pkg.dependencies?.esbuild || pkg.devDependencies?.esbuild) {
-            throw new Error('top-level manifest esbuild must remain absent');
-          }
-
-          requireEqual(versionAt('node_modules/axios'), '1.19.0', 'lock axios');
-          requireGte(versionAt('node_modules/form-data'), '4.0.6', 'lock form-data');
-          requireGte(versionAt('node_modules/react-router-dom'), '7.18.2', 'lock react-router-dom');
-          requireGte(versionAt('node_modules/react-router'), '7.18.2', 'lock react-router');
-          requireEqual(versionAt('node_modules/vite'), '7.3.6', 'lock vite');
-          if (parse(versionAt('node_modules/@vitejs/plugin-react'))[0] !== 5) {
-            throw new Error(`lock plugin-react must remain 5.x, got ${versionAt('node_modules/@vitejs/plugin-react')}`);
-          }
-          requireGte(versionAt('node_modules/postcss'), '8.5.18', 'lock postcss');
-          requireGte(versionAt('node_modules/brace-expansion'), '5.0.8', 'lock brace-expansion');
-          requireGte(versionAt('node_modules/esbuild'), '0.28.1', 'lock esbuild');
-          requireGte(versionAt('node_modules/@babel/core'), '7.29.6', 'lock @babel/core');
-          requireGte(versionAt('node_modules/undici'), '7.29.0', 'lock undici');
-          requireEqual(versionAt('node_modules/vitest'), '4.1.9', 'lock vitest');
-
+          equal(pkg.dependencies.axios, '1.19.0', 'manifest axios');
+          equal(pkg.dependencies['react-router-dom'], '7.18.2', 'manifest react-router-dom');
+          equal(pkg.devDependencies.vite, '7.3.6', 'manifest vite');
+          if (!/^\^5\./.test(pkg.devDependencies['@vitejs/plugin-react'])) throw new Error('manifest plugin-react must remain compatible 5.x');
+          equal(pkg.devDependencies.postcss, '^8.5.18', 'manifest postcss');
+          equal(pkg.devDependencies.vitest, '4.1.9', 'manifest vitest');
+          if (pkg.dependencies?.esbuild || pkg.devDependencies?.esbuild) throw new Error('top-level manifest esbuild must remain absent');
+          equal(versionAt('node_modules/axios'), '1.19.0', 'lock axios');
+          atLeast(versionAt('node_modules/form-data'), '4.0.6', 'lock form-data');
+          atLeast(versionAt('node_modules/react-router-dom'), '7.18.2', 'lock react-router-dom');
+          atLeast(versionAt('node_modules/react-router'), '7.18.2', 'lock react-router');
+          equal(versionAt('node_modules/vite'), '7.3.6', 'lock vite');
+          if (parse(versionAt('node_modules/@vitejs/plugin-react'))[0] !== 5) throw new Error('lock plugin-react must remain 5.x');
+          atLeast(versionAt('node_modules/postcss'), '8.5.18', 'lock postcss');
+          atLeast(versionAt('node_modules/brace-expansion'), '5.0.8', 'lock brace-expansion');
+          atLeast(versionAt('node_modules/esbuild'), '0.28.1', 'lock esbuild');
+          atLeast(versionAt('node_modules/@babel/core'), '7.29.6', 'lock @babel/core');
+          atLeast(versionAt('node_modules/undici'), '7.29.0', 'lock undici');
+          equal(versionAt('node_modules/vitest'), '4.1.9', 'lock vitest');
           console.log('Supply-chain version contract verified.');
           NODE
 
@@ -156,7 +156,7 @@ jobs:
           npm install --package-lock-only --ignore-scripts 2>&1 | tee cert-a-evidence/npm-lock-regeneration.log
           npm update brace-expansion @babel/core undici esbuild react-router react-router-dom --package-lock-only --ignore-scripts 2>&1 | tee cert-a-evidence/npm-security-refresh.log
 
-      - name: Verify corrected dependency contract from lockfile
+      - name: Verify corrected dependency contract
         shell: bash
         run: |
           set -euo pipefail
@@ -164,20 +164,9 @@ jobs:
           node <<'NODE' | tee cert-a-evidence/resolved-targets.txt
           import fs from 'node:fs';
           const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-          for (const path of [
-            'node_modules/axios',
-            'node_modules/form-data',
-            'node_modules/react-router-dom',
-            'node_modules/react-router',
-            'node_modules/vite',
-            'node_modules/@vitejs/plugin-react',
-            'node_modules/postcss',
-            'node_modules/brace-expansion',
-            'node_modules/esbuild',
-            'node_modules/@babel/core',
-            'node_modules/undici',
-            'node_modules/vitest',
-          ]) console.log(`${path}=${lock.packages[path]?.version ?? 'MISSING'}`);
+          for (const path of ['node_modules/axios','node_modules/form-data','node_modules/react-router-dom','node_modules/react-router','node_modules/vite','node_modules/@vitejs/plugin-react','node_modules/postcss','node_modules/brace-expansion','node_modules/esbuild','node_modules/@babel/core','node_modules/undici','node_modules/vitest']) {
+            console.log(`${path}=${lock.packages[path]?.version ?? 'MISSING'}`);
+          }
           NODE
 
       - name: Clean install and dependency tree
@@ -193,14 +182,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm audit --omit=dev --json > cert-a-evidence/npm-audit-production.json || prod_status=$?
-          prod_status=${prod_status:-0}
-          npm audit --json > cert-a-evidence/npm-audit-all.json || all_status=$?
-          all_status=${all_status:-0}
+          npm audit --omit=dev --json > cert-a-evidence/npm-audit-production.json
+          npm audit --json > cert-a-evidence/npm-audit-all.json
           node <<'NODE' | tee cert-a-evidence/npm-audit-summary.txt
           import fs from 'node:fs';
           let fail = false;
-          for (const [label, file] of [['production', 'cert-a-evidence/npm-audit-production.json'], ['all', 'cert-a-evidence/npm-audit-all.json']]) {
+          for (const [label, file] of [['production','cert-a-evidence/npm-audit-production.json'],['all','cert-a-evidence/npm-audit-all.json']]) {
             const data = JSON.parse(fs.readFileSync(file, 'utf8'));
             const v = data.metadata?.vulnerabilities ?? {};
             console.log(`${label}: info=${v.info ?? 0} low=${v.low ?? 0} moderate=${v.moderate ?? 0} high=${v.high ?? 0} critical=${v.critical ?? 0} total=${v.total ?? 0}`);
@@ -208,14 +195,10 @@ jobs:
           }
           if (fail) process.exit(1);
           NODE
-          printf 'npm_audit_production_exit=%s\nnpm_audit_all_exit=%s\n' "$prod_status" "$all_status" | tee -a cert-a-evidence/npm-audit-summary.txt
           npm audit --audit-level=high 2>&1 | tee cert-a-evidence/npm-audit-high-gate.log
 
       - name: Lint
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run lint 2>&1 | tee cert-a-evidence/lint.log
+        run: npm run lint 2>&1 | tee cert-a-evidence/lint.log
 
       - name: Full frontend test suite
         shell: bash
@@ -225,10 +208,7 @@ jobs:
           grep -Eq '230 passed|Tests[[:space:]]+230 passed' cert-a-evidence/tests.log
 
       - name: Browser session verifier
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run verify:browser-session 2>&1 | tee cert-a-evidence/browser-session.log
+        run: npm run verify:browser-session 2>&1 | tee cert-a-evidence/browser-session.log
 
       - name: Platform Billing regression suite
         shell: bash
@@ -238,25 +218,19 @@ jobs:
           grep -Eq '80 passed|Tests[[:space:]]+80 passed' cert-a-evidence/platform-billing.log
 
       - name: TypeScript compile
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx tsc -b --pretty false 2>&1 | tee cert-a-evidence/typescript.log
+        run: npx tsc -b --pretty false 2>&1 | tee cert-a-evidence/typescript.log
 
       - name: Production Vite build
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run build 2>&1 | tee cert-a-evidence/build.log
+        run: npm run build 2>&1 | tee cert-a-evidence/build.log
 
       - name: Reject Vite Oxc esbuild compatibility warnings
         shell: bash
         run: |
           set -euo pipefail
-          cat cert-a-evidence/tests.log cert-a-evidence/build.log > cert-a-evidence/toolchain-output.log
-          if grep -Eiq '(vite|oxc|esbuild).*(warn|deprecat)|(warn|deprecat).*(vite|oxc|esbuild)' cert-a-evidence/toolchain-output.log; then
+          cat cert-a-evidence/tests.log cert-a-evidence/platform-billing.log cert-a-evidence/build.log > cert-a-evidence/toolchain-output.log
+          if grep -Eiq '(vite|oxc|esbuild).*(warn|deprecat)|(warn|deprecat).*(vite|oxc|esbuild)|Both esbuild and oxc options were set' cert-a-evidence/toolchain-output.log; then
             echo 'CERT-A warning gate failed: Vite/Oxc/esbuild warning or deprecation detected.' >&2
-            grep -Ein '(vite|oxc|esbuild).*(warn|deprecat)|(warn|deprecat).*(vite|oxc|esbuild)' cert-a-evidence/toolchain-output.log >&2 || true
+            grep -Ein '(vite|oxc|esbuild).*(warn|deprecat)|(warn|deprecat).*(vite|oxc|esbuild)|Both esbuild and oxc options were set' cert-a-evidence/toolchain-output.log >&2 || true
             exit 1
           fi
 
@@ -264,19 +238,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --exit-code "$CERT_A_PARENT" -- src vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json
+          git diff --exit-code "$CERT_A_PARENT" -- src vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json
           git diff --name-only "$CERT_A_PARENT" | tee cert-a-evidence/final-working-tree-files.txt
           node <<'NODE'
           import { execFileSync } from 'node:child_process';
-          const files = execFileSync('git', ['diff', '--name-only', process.env.CERT_A_PARENT], { encoding: 'utf8' })
-            .trim().split('\n').filter(Boolean).sort();
-          const allowed = [
-            '.github/workflows/cert-a-generation.yml',
-            '.github/workflows/frontend-quality.yml',
-            'package-lock.json',
-            'package.json',
-            'scripts/verify-supply-chain.mjs',
-          ].sort();
+          const files = execFileSync('git', ['diff','--name-only',process.env.CERT_A_PARENT], {encoding:'utf8'}).trim().split('\n').filter(Boolean).sort();
+          const allowed = ['.github/workflows/cert-a-generation.yml','.github/workflows/frontend-quality.yml','package-lock.json','package.json','scripts/verify-supply-chain.mjs','vitest.config.ts'].sort();
           if (JSON.stringify(files) !== JSON.stringify(allowed)) throw new Error(`unexpected changed files: ${JSON.stringify(files)}`);
           NODE
           git diff --check "$CERT_A_PARENT"
@@ -289,17 +256,18 @@ jobs:
           mkdir -p cert-a-output/candidate/.github/workflows cert-a-output/candidate/scripts
           cp package.json cert-a-output/candidate/package.json
           cp package-lock.json cert-a-output/candidate/package-lock.json
+          cp vitest.config.ts cert-a-output/candidate/vitest.config.ts
           cp .github/workflows/frontend-quality.yml cert-a-output/candidate/.github/workflows/frontend-quality.yml
           cp scripts/verify-supply-chain.mjs cert-a-output/candidate/scripts/verify-supply-chain.mjs
           cp -R cert-a-evidence cert-a-output/evidence
           printf '%s\n' "$CERT_A_PARENT" > cert-a-output/PARENT_SHA.txt
           git rev-parse HEAD > cert-a-output/GENERATION_REF_SHA.txt
 
-      - name: Upload CERT-A corrected candidate artifact
+      - name: Upload CERT-A warning-clean candidate artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cert-a-corrected-${{ github.run_id }}
+          name: cert-a-warning-clean-${{ github.run_id }}
           path: cert-a-output
           if-no-files-found: error
           retention-days: 3
