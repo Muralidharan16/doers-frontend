@@ -1,0 +1,232 @@
+name: CERT-B Production Browser and Deployment Gate
+
+on:
+  pull_request:
+    branches: [hardening/frontend-production-readiness]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cert-b-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CERT_B_BACKEND_SHA: b1214b721e71f9abd1a4a7e71c34263d19682d26
+  CERT_B_ORIGIN: https://cert-b.local:8443
+  CERT_B_MAILBOX: /tmp/doers-cert-b/mailbox.jsonl
+
+jobs:
+  browser-deployment-certification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: doers
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d doers"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    steps:
+      - name: Checkout exact frontend candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact backend CERT-B candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Muralidharan16/gymflow-backend
+          ref: ${{ env.CERT_B_BACKEND_SHA }}
+          path: backend
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-test.lock
+
+      - name: Install exact application and certification dependencies
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run verify:supply-chain
+          python -m pip install 'pip==26.2.1'
+          python -m pip install -r backend/requirements-test.lock
+          python -m pip install 'aiosmtpd==1.4.6'
+          python -m pip check
+          npm install --prefix /tmp/doers-cert-b-playwright --no-save --no-package-lock 'playwright@1.62.0'
+          /tmp/doers-cert-b-playwright/node_modules/.bin/playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx postgresql-client
+
+      - name: Prepare HTTPS and local DNS
+        run: |
+          set -euo pipefail
+          sudo sh -c 'echo "127.0.0.1 cert-b.local" >> /etc/hosts'
+          mkdir -p /tmp/doers-cert-b
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/doers-cert-b/tls.key -out /tmp/doers-cert-b/tls.crt \
+            -subj '/CN=cert-b.local' -addext 'subjectAltName=DNS:cert-b.local'
+
+      - name: Bootstrap canonical cluster roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          python -s backend/scripts/render_cluster_role_bootstrap.py \
+            | psql -X -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1
+
+      - name: Migrate a fresh PostgreSQL 16 database to exact HEAD
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/doers
+          AUTH_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/doers
+          REDIS_URL: redis://127.0.0.1:6379/0
+          CELERY_BROKER_URL: redis://127.0.0.1:6379/1
+          CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/2
+          SECRET_KEY: cert-b-migration-secret-key-0123456789abcdef
+          AWS_ACCESS_KEY_ID: cert-b
+          AWS_SECRET_ACCESS_KEY: cert-b
+          ENVIRONMENT: development
+        run: |
+          set -euo pipefail
+          alembic upgrade head
+          alembic current --check-heads
+
+      - name: Bind exact least-privilege runtime identities
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -X -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE cert_b_api LOGIN PASSWORD 'cert_b_api_password';
+          CREATE ROLE cert_b_auth LOGIN PASSWORD 'cert_b_auth_password';
+          GRANT app_runtime, app_user TO cert_b_api WITH ADMIN FALSE, INHERIT TRUE, SET FALSE;
+          GRANT auth_runtime, app_user TO cert_b_auth WITH ADMIN FALSE, INHERIT TRUE, SET FALSE;
+          ALTER ROLE cert_b_api SET row_security = on;
+          ALTER ROLE cert_b_api SET statement_timeout = '5s';
+          ALTER ROLE cert_b_api SET lock_timeout = '2s';
+          ALTER ROLE cert_b_api SET idle_in_transaction_session_timeout = '15s';
+          ALTER ROLE cert_b_auth SET row_security = on;
+          ALTER ROLE cert_b_auth SET statement_timeout = '5s';
+          ALTER ROLE cert_b_auth SET lock_timeout = '2s';
+          ALTER ROLE cert_b_auth SET idle_in_transaction_session_timeout = '15s';
+          SQL
+          test "$(PGPASSWORD=cert_b_api_password psql -XAt -h 127.0.0.1 -U cert_b_api -d doers -c 'select current_user')" = cert_b_api
+          test "$(PGPASSWORD=cert_b_auth_password psql -XAt -h 127.0.0.1 -U cert_b_auth -d doers -c 'select current_user')" = cert_b_auth
+
+      - name: Start authenticated STARTTLS SMTP capture
+        run: |
+          set -euo pipefail
+          python cert-b/smtp_capture.py --output "$CERT_B_MAILBOX" \
+            --cert /tmp/doers-cert-b/tls.crt --key /tmp/doers-cert-b/tls.key \
+            >/tmp/doers-cert-b/smtp.log 2>&1 &
+          echo $! >/tmp/doers-cert-b/smtp.pid
+          sleep 1
+          kill -0 "$(cat /tmp/doers-cert-b/smtp.pid)"
+
+      - name: Start production-profile FastAPI
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://cert_b_api:cert_b_api_password@127.0.0.1:5432/doers
+          AUTH_DATABASE_URL: postgresql+asyncpg://cert_b_auth:cert_b_auth_password@127.0.0.1:5432/doers
+          WORKER_DATABASE_URL: ''
+          MAINTENANCE_DATABASE_URL: ''
+          REDIS_URL: redis://127.0.0.1:6379/0
+          CELERY_BROKER_URL: redis://127.0.0.1:6379/1
+          CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/2
+          DOERS_PROCESS_PROFILE: api
+          CELERY_WORKER_PROFILE: ''
+          SECRET_KEY: cert-b-production-secret-key-0123456789abcdef
+          INTERNAL_CONTROL_TOKEN: cert-b-control-token-abcdef0123456789-9876543210
+          BACKEND_BASE_URL: https://cert-b.local:8443/api
+          FRONTEND_URL: https://cert-b.local:8443
+          CORS_ORIGINS: https://cert-b.local:8443
+          MAIL_PROVIDER: smtp
+          MAIL_FROM: noreply@cert-b.example.invalid
+          MAIL_SERVER: 127.0.0.1
+          MAIL_PORT: '1025'
+          MAIL_USERNAME: cert-b
+          MAIL_PASSWORD: cert-b-password
+          ACCESS_TOKEN_EXPIRE_MINUTES: '1'
+          REFRESH_TOKEN_EXPIRE_DAYS: '1'
+          AWS_ACCESS_KEY_ID: cert-b
+          AWS_SECRET_ACCESS_KEY: cert-b
+          AWS_REGION_NAME: us-east-1
+          S3_BUCKET_NAME: cert-b-bucket
+          CDN_BASE_URL: https://cdn.cert-b.example.invalid
+          ENVIRONMENT: production
+        run: |
+          set -euo pipefail
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/doers-cert-b/backend.log 2>&1 &
+          echo $! >/tmp/doers-cert-b/backend.pid
+          python - <<'PY'
+          import socket, time
+          for _ in range(60):
+              try:
+                  with socket.create_connection(('127.0.0.1', 8000), timeout=1):
+                      raise SystemExit(0)
+              except OSError:
+                  time.sleep(.5)
+          raise SystemExit('backend did not become ready')
+          PY
+
+      - name: Re-run frontend quality and build production bundle
+        env:
+          VITE_API_BASE_URL: /api
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm test
+          npm run verify:browser-session
+          npm run test:platform-billing
+          npm run build
+
+      - name: Start same-origin HTTPS production edge
+        run: |
+          set -euo pipefail
+          sed "s|__FRONTEND_DIST__|$GITHUB_WORKSPACE/dist|g" cert-b/nginx.conf >/tmp/doers-cert-b/nginx.conf
+          sudo nginx -c /tmp/doers-cert-b/nginx.conf
+          curl --fail --silent --show-error --insecure --resolve cert-b.local:8443:127.0.0.1 \
+            https://cert-b.local:8443/signup >/dev/null
+
+      - name: Run real Chromium CERT-B scenarios
+        env:
+          NODE_PATH: /tmp/doers-cert-b-playwright/node_modules
+        run: node cert-b/e2e.cjs
+
+      - name: Preserve failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cert-b-failure-evidence
+          path: |
+            /tmp/doers-cert-b/backend.log
+            /tmp/doers-cert-b/smtp.log
+            /tmp/doers-cert-b/nginx-error.log
+            /tmp/doers-cert-b/nginx-access.log
+          if-no-files-found: ignore
+          retention-days: 7
