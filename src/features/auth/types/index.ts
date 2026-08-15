@@ -3,29 +3,33 @@ export interface LoginCredentials {
   password: string;
 }
 
-export interface AuthTokens {
-  access_token: string;
-  refresh_token: string;
-}
-
-export interface AuthResponse {
-  user: User;
-  tokens: AuthTokens;
-  onboarding_completed: boolean;
-}
-
-export interface SignupResponse {
-  status: string;
-  message: string;
-  signup_poll_token?: string;
-}
-
 export interface User {
   id: string;
   email: string;
   name?: string;
   organizationName?: string;
   gym_ids?: string[];
+}
+
+export interface SessionResponse {
+  user: User;
+  onboarding_completed: boolean;
+}
+
+export interface RefreshResponse {
+  status: string;
+  onboarding_completed?: boolean;
+}
+
+export interface SignupResponse {
+  status: string;
+  message: string;
+}
+
+export interface SignupStatusResponse {
+  status: 'pending' | 'verified';
+  onboarding_completed?: boolean;
+  user?: User;
 }
 
 export type FacilityType =

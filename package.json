@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:platform-billing": "vitest run src/features/platformBilling"
+    "test:platform-billing": "vitest run src/features/platformBilling",
+    "verify:browser-session": "node scripts/verify-browser-session-security.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
