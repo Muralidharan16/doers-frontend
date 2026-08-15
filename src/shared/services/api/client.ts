@@ -25,6 +25,7 @@ const refreshClient = axios.create({
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 type ErrorPayload = { detail?: { code?: TrialLockCode; message?: string } };
+type SessionRoutingMetadata = { org_id: string; role: string };
 
 const publicAuthRoutes = [
   '/auth/login',
@@ -101,6 +102,19 @@ apiClient.interceptors.response.use(
     }
   },
 );
+
+/**
+ * @deprecated Legacy call-site name retained only for the PR-02B integration
+ * boundary. This function never reads or decodes a token. It returns non-secret
+ * routing metadata established by the authenticated server session response.
+ */
+export const getAuthTokenPayload = (): SessionRoutingMetadata => {
+  const { status, user } = useAuthStore.getState();
+  if (status !== 'authenticated' || !user) {
+    return { org_id: '', role: 'unauthenticated' };
+  }
+  return { org_id: user.org_id, role: user.role };
+};
 
 export const fetchBranches = async () => apiClient.get('/branches');
 

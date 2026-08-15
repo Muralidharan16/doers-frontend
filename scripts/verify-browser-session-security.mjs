@@ -14,7 +14,6 @@ const forbiddenCredentialFragments = [
   'access_token',
   'refresh_token',
   'Authorization',
-  'getAuthTokenPayload',
   'validateTenantAccess',
 ];
 
@@ -35,6 +34,11 @@ if (!storeSource.includes("removeItem(LEGACY_AUTH_STORAGE_KEY)")) {
   throw new Error('Legacy auth-storage credentials must be purged on load.');
 }
 
+const typeSource = await readFile('src/features/auth/types/index.ts', 'utf8');
+if (!typeSource.includes('org_id: string;') || !typeSource.includes('role: string;')) {
+  throw new Error('Authenticated session metadata must include server-established org_id and role.');
+}
+
 const apiSource = await readFile('src/features/auth/services/authApi.ts', 'utf8');
 if (!apiSource.includes("post('/auth/signup-status'")) {
   throw new Error('Signup status must use POST so its poll secret is not placed in the URL.');
@@ -49,6 +53,31 @@ if (!clientSource.includes('refreshPromise')) {
 }
 if (!clientSource.includes('withCredentials: true')) {
   throw new Error('Browser API transport must include secure cookies.');
+}
+if (!clientSource.includes('useAuthStore.getState()')) {
+  throw new Error('Legacy routing adapter must read only authenticated in-memory session state.');
+}
+if (!clientSource.includes('return { org_id: user.org_id, role: user.role };')) {
+  throw new Error('Legacy routing adapter must return only server-established org_id and role.');
+}
+if (!clientSource.includes("return { org_id: '', role: 'unauthenticated' };")) {
+  throw new Error('Missing session metadata must fail closed rather than default to owner.');
+}
+for (const forbidden of [
+  "localStorage.getItem('auth-storage')",
+  'window.atob(',
+  '.split(\'.\')',
+  "'Bearer '",
+  'jwt.decode',
+]) {
+  if (clientSource.includes(forbidden)) {
+    throw new Error(`Browser API client reintroduced token parsing/transport: ${forbidden}`);
+  }
+}
+
+const appShellSource = await readFile('src/components/layout/AppShell.tsx', 'utf8');
+if (appShellSource.includes('authApi.getMe') || appShellSource.includes('syncUser')) {
+  throw new Error('AppShell must not duplicate the AuthGuard server-session bootstrap.');
 }
 
 const sidebarSource = await readFile('src/components/layout/Sidebar.tsx', 'utf8');

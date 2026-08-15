@@ -6,6 +6,8 @@ export interface LoginCredentials {
 export interface User {
   id: string;
   email: string;
+  org_id: string;
+  role: string;
   name?: string;
   organizationName?: string;
   gym_ids?: string[];
