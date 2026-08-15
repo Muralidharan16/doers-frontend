@@ -54,19 +54,13 @@ jobs:
           const fs = require('fs');
           const path = 'package.json';
           const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-
           pkg.dependencies.axios = '1.19.0';
           pkg.devDependencies.vite = '7.3.5';
           pkg.devDependencies['@vitejs/plugin-react'] = '^5.0.0';
           pkg.devDependencies.postcss = '^8.5.18';
-
           if (pkg.dependencies?.esbuild) delete pkg.dependencies.esbuild;
           if (pkg.devDependencies?.esbuild) delete pkg.devDependencies.esbuild;
-
-          // CERT-A explicitly retains Vitest 4.1.9. Pinning prevents unrelated
-          // resolver drift while the lockfile is regenerated.
           pkg.devDependencies.vitest = '4.1.9';
-
           fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
           NODE
           cp package.json cert-a-evidence/package.generated.json
@@ -88,7 +82,6 @@ jobs:
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
           const packages = lock.packages || {};
-
           function parse(v) {
             const m = String(v || '').match(/^(\d+)\.(\d+)\.(\d+)/);
             if (!m) throw new Error(`invalid semver: ${v}`);
@@ -115,18 +108,14 @@ jobs:
             if (!gte(actual, floor)) throw new Error(`${label}: expected >=${floor}, got ${actual}`);
             console.log(`${label}=${actual} (>=${floor})`);
           }
-
           requireEqual(pkg.dependencies.axios, '1.19.0', 'manifest axios');
           requireEqual(pkg.devDependencies.vite, '7.3.5', 'manifest vite');
-          if (!/^\^5\./.test(pkg.devDependencies['@vitejs/plugin-react'])) {
-            throw new Error(`manifest plugin-react must remain compatible 5.x, got ${pkg.devDependencies['@vitejs/plugin-react']}`);
-          }
+          if (!/^\^5\./.test(pkg.devDependencies['@vitejs/plugin-react'])) throw new Error(`manifest plugin-react must remain compatible 5.x, got ${pkg.devDependencies['@vitejs/plugin-react']}`);
           console.log(`manifest plugin-react=${pkg.devDependencies['@vitejs/plugin-react']}`);
           requireEqual(pkg.devDependencies.postcss, '^8.5.18', 'manifest postcss');
           requireEqual(pkg.devDependencies.vitest, '4.1.9', 'manifest vitest');
           if (pkg.dependencies?.esbuild || pkg.devDependencies?.esbuild) throw new Error('top-level manifest esbuild must be absent');
           console.log('manifest esbuild=absent');
-
           requireEqual(versionAt('node_modules/axios'), '1.19.0', 'lock axios');
           requireEqual(versionAt('node_modules/vite'), '7.3.5', 'lock vite');
           const plugin = versionAt('node_modules/@vitejs/plugin-react');
@@ -154,11 +143,12 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          npm audit --omit=dev --json > cert-a-evidence/npm-audit-production.json
-          prod_status=$?
-          npm audit --json > cert-a-evidence/npm-audit-all.json
-          all_status=$?
-          node <<'NODE' | tee cert-a-evidence/npm-audit-summary.txt
+          prod_status=0
+          npm audit --omit=dev --json > cert-a-evidence/npm-audit-production.json || prod_status=$?
+          all_status=0
+          npm audit --json > cert-a-evidence/npm-audit-all.json || all_status=$?
+          summary_status=0
+          node <<'NODE' | tee cert-a-evidence/npm-audit-summary.txt || summary_status=$?
           const fs = require('fs');
           for (const [label, file] of [['production', 'cert-a-evidence/npm-audit-production.json'], ['all', 'cert-a-evidence/npm-audit-all.json']]) {
             const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -167,10 +157,7 @@ jobs:
             if ((v.high || 0) > 0 || (v.critical || 0) > 0) process.exitCode = 1;
           }
           NODE
-          summary_status=$?
-          if [ "$prod_status" -ne 0 ] || [ "$all_status" -ne 0 ]; then
-            echo "npm audit returned nonzero; JSON retained for exact advisory review." | tee -a cert-a-evidence/npm-audit-summary.txt
-          fi
+          printf 'npm_audit_production_exit=%s\nnpm_audit_all_exit=%s\n' "$prod_status" "$all_status" | tee -a cert-a-evidence/npm-audit-summary.txt
           exit "$summary_status"
 
       - name: Lint
@@ -224,12 +211,9 @@ jobs:
           node <<'NODE'
           const { execFileSync } = require('child_process');
           const parent = process.env.CERT_A_PARENT;
-          const files = execFileSync('git', ['diff', '--name-only', parent], {encoding: 'utf8'})
-            .trim().split('\n').filter(Boolean).sort();
+          const files = execFileSync('git', ['diff', '--name-only', parent], {encoding: 'utf8'}).trim().split('\n').filter(Boolean).sort();
           const allowed = ['.github/workflows/cert-a-generation.yml', 'package-lock.json', 'package.json'].sort();
-          if (JSON.stringify(files) !== JSON.stringify(allowed)) {
-            throw new Error(`unexpected changed files: ${JSON.stringify(files)}`);
-          }
+          if (JSON.stringify(files) !== JSON.stringify(allowed)) throw new Error(`unexpected changed files: ${JSON.stringify(files)}`);
           NODE
           git diff --check "$CERT_A_PARENT"
 
