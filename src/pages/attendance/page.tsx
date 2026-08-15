@@ -1,24 +1,15 @@
 import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useAttendance } from '@/features/reports/hooks/useDashboard';
-import { useMemo } from 'react';
 
 export default function AttendancePage() {
   const attendanceQuery = useAttendance(30);
-
-  const highestHour = useMemo(() => {
-    if (!attendanceQuery.data?.hours || attendanceQuery.data.hours.length === 0) return null;
-    let max = attendanceQuery.data.hours[0];
-    for (const h of attendanceQuery.data.hours) {
-      if (h.count > max.count) max = h;
-    }
-    return max.count > 0 ? max : null;
-  }, [attendanceQuery.data?.hours]);
-
-  const maxCount = useMemo(() => {
-    if (!attendanceQuery.data?.hours || attendanceQuery.data.hours.length === 0) return 0;
-    return Math.max(...attendanceQuery.data.hours.map(h => h.count));
-  }, [attendanceQuery.data?.hours]);
+  const hours = attendanceQuery.data?.hours ?? [];
+  const busiestHour = hours.length > 0
+    ? hours.reduce((highest, hour) => hour.count > highest.count ? hour : highest)
+    : null;
+  const highestHour = busiestHour && busiestHour.count > 0 ? busiestHour : null;
+  const maxCount = hours.length > 0 ? Math.max(...hours.map((hour) => hour.count)) : 0;
 
   return (
     <div className="space-y-8 animate-fade-in">

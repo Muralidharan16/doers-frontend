@@ -3,6 +3,7 @@ import { organizationApi } from '../services/organizationApi';
 import type { OrganizationProfile } from '../types';
 import { Loader2, Save, Globe, Info, Calendar, Megaphone, Building2, Check, Briefcase, ShieldCheck, FileText } from 'lucide-react';
 import { FACILITY_TYPE_LABELS } from '@/features/auth/types';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 
 export const BasicInfoForm: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -12,21 +13,30 @@ export const BasicInfoForm: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    loadProfile();
-  }, []);
+    let active = true;
 
-  const loadProfile = async () => {
-    try {
-      setLoading(true);
-      const data = await organizationApi.getProfile();
-      setProfile(data);
-    } catch (err) {
-      setError('Failed to load organization profile');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    organizationApi.getProfile()
+      .then((data) => {
+        if (active) {
+          setProfile(data);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setError('Failed to load organization profile');
+        }
+        console.error(err);
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +62,8 @@ export const BasicInfoForm: React.FC = () => {
       await organizationApi.updateProfile(payload);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update profile');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to update profile'));
     } finally {
       setSaving(false);
     }

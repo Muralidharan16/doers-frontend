@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 
 export type ConfirmationDialogProps = {
@@ -49,6 +49,35 @@ export function ConfirmationDialog({
   const [isConfirming, setIsConfirming] = useState(false);
   const isPending = pending || isConfirming;
 
+  const containFocus = useCallback((event: KeyboardEvent) => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusableElements = getFocusableElements(dialog);
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey) {
+      if (activeElement === firstElement || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        lastElement.focus();
+      }
+      return;
+    }
+
+    if (activeElement === lastElement || !dialog.contains(activeElement)) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -91,38 +120,9 @@ export function ConfirmationDialog({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isPending, onCancel, open]);
+  }, [containFocus, isPending, onCancel, open]);
 
   if (!open) return null;
-
-  const containFocus = (event: KeyboardEvent) => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const focusableElements = getFocusableElements(dialog);
-    if (focusableElements.length === 0) {
-      event.preventDefault();
-      dialog.focus();
-      return;
-    }
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-    const activeElement = document.activeElement;
-
-    if (event.shiftKey) {
-      if (activeElement === firstElement || !dialog.contains(activeElement)) {
-        event.preventDefault();
-        lastElement.focus();
-      }
-      return;
-    }
-
-    if (activeElement === lastElement || !dialog.contains(activeElement)) {
-      event.preventDefault();
-      firstElement.focus();
-    }
-  };
 
   const handleConfirm = async () => {
     if (isPending || confirmingRef.current) return;

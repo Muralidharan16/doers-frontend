@@ -11,6 +11,14 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false } },
 });
 
+type ExpiringSubscriptionsResult = ReturnType<typeof reportsHooks.useExpiringSubscriptions>;
+type CollectionsResult = ReturnType<typeof reportsHooks.useCollections>;
+type AttendanceResult = ReturnType<typeof reportsHooks.useAttendance>;
+
+const expiringSubscriptionsResult = (value: Partial<ExpiringSubscriptionsResult>): ExpiringSubscriptionsResult => value as ExpiringSubscriptionsResult;
+const collectionsResult = (value: Partial<CollectionsResult>): CollectionsResult => value as CollectionsResult;
+const attendanceResult = (value: Partial<AttendanceResult>): AttendanceResult => value as AttendanceResult;
+
 const renderDashboard = () =>
   render(
     <QueryClientProvider client={queryClient}>
@@ -22,15 +30,15 @@ const renderDashboard = () =>
 
 describe("DashboardPage", () => {
   it("Test 1 — initial successful load state with populated attendance", () => {
-    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue({ data: [{ member_id: "1", member_name: "John", email: "j@j.com", days_remaining: 3, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "2", member_name: "Jane", email: "jane@j.com", days_remaining: 2, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "3", member_name: "Bob", email: "bob@b.com", days_remaining: 1, end_date: "2026-06-01", plan_name: "Pro" }], isLoading: false } as any);
-    vi.mocked(reportsHooks.useCollections).mockReturnValue({
+    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue(expiringSubscriptionsResult({ data: [{ member_id: "1", member_name: "John", email: "j@j.com", days_remaining: 3, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "2", member_name: "Jane", email: "jane@j.com", days_remaining: 2, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "3", member_name: "Bob", email: "bob@b.com", days_remaining: 1, end_date: "2026-06-01", plan_name: "Pro" }], isLoading: false }));
+    vi.mocked(reportsHooks.useCollections).mockReturnValue(collectionsResult({
       data: [
         { date: "2026-05-01", cash: 10000, upi: 15000, card: 5000, total: 30000, count: 3 },
         { date: "2026-05-02", cash: 15000, upi: 20000, card: 10000, total: 45000, count: 4 },
       ],
       isLoading: false
-    } as any);
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    }));
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [
           { hour: 6, count: 12 },
@@ -44,7 +52,7 @@ describe("DashboardPage", () => {
       isLoading: false,
       isPending: false,
       isError: false
-    } as any);
+    }));
 
     renderDashboard();
 
@@ -101,14 +109,14 @@ describe("DashboardPage", () => {
   });
 
   it("Test 2 — attendance pending", () => {
-    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue({ data: [], isLoading: false } as any);
-    vi.mocked(reportsHooks.useCollections).mockReturnValue({ data: [], isLoading: false } as any);
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue(expiringSubscriptionsResult({ data: [], isLoading: false }));
+    vi.mocked(reportsHooks.useCollections).mockReturnValue(collectionsResult({ data: [], isLoading: false }));
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: undefined,
       isLoading: true,
       isPending: true,
       isError: false
-    } as any);
+    }));
 
     renderDashboard();
 
@@ -117,9 +125,9 @@ describe("DashboardPage", () => {
   });
 
   it("Test 3 — attendance successful empty", () => {
-    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue({ data: [], isLoading: false } as any);
-    vi.mocked(reportsHooks.useCollections).mockReturnValue({ data: [], isLoading: false } as any);
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue(expiringSubscriptionsResult({ data: [], isLoading: false }));
+    vi.mocked(reportsHooks.useCollections).mockReturnValue(collectionsResult({ data: [], isLoading: false }));
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [],
         days_analyzed: 30
@@ -127,7 +135,7 @@ describe("DashboardPage", () => {
       isLoading: false,
       isPending: false,
       isError: false
-    } as any);
+    }));
 
     renderDashboard();
 
@@ -137,14 +145,14 @@ describe("DashboardPage", () => {
   });
 
   it("Test 4 — attendance error", () => {
-    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue({ data: [], isLoading: false } as any);
-    vi.mocked(reportsHooks.useCollections).mockReturnValue({ data: [], isLoading: false } as any);
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue(expiringSubscriptionsResult({ data: [], isLoading: false }));
+    vi.mocked(reportsHooks.useCollections).mockReturnValue(collectionsResult({ data: [], isLoading: false }));
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: undefined,
       isLoading: false,
       isPending: false,
       isError: true
-    } as any);
+    }));
 
     renderDashboard();
 
@@ -154,12 +162,12 @@ describe("DashboardPage", () => {
   });
 
   it("Test 5 — section-scoped B1 assertions", () => {
-    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue({ data: [{ member_id: "1", member_name: "John", email: "j@j.com", days_remaining: 3, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "2", member_name: "Jane", email: "jane@j.com", days_remaining: 2, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "3", member_name: "Bob", email: "bob@b.com", days_remaining: 1, end_date: "2026-06-01", plan_name: "Pro" }], isLoading: false } as any);
-    vi.mocked(reportsHooks.useCollections).mockReturnValue({
+    vi.mocked(reportsHooks.useExpiringSubscriptions).mockReturnValue(expiringSubscriptionsResult({ data: [{ member_id: "1", member_name: "John", email: "j@j.com", days_remaining: 3, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "2", member_name: "Jane", email: "jane@j.com", days_remaining: 2, end_date: "2026-06-01", plan_name: "Basic" }, { member_id: "3", member_name: "Bob", email: "bob@b.com", days_remaining: 1, end_date: "2026-06-01", plan_name: "Pro" }], isLoading: false }));
+    vi.mocked(reportsHooks.useCollections).mockReturnValue(collectionsResult({
       data: [],
       isLoading: false
-    } as any);
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    }));
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [
           { hour: 6, count: 12 }
@@ -169,7 +177,7 @@ describe("DashboardPage", () => {
       isLoading: false,
       isPending: false,
       isError: false
-    } as any);
+    }));
 
     renderDashboard();
 

@@ -77,23 +77,29 @@ export function useLogoUpload() {
     }, 2000);
   }, [clearPolling]);
 
-  const loadInitialStatus = useCallback(async () => {
-    try {
-      const data = await assetService.getLogoStatus();
-      if (data.logo_thumb_url) {
-        setLogoUrls(data);
-        setLogoState('idle-has-logo');
-      } else {
-        setLogoState('idle-empty');
-      }
-    } catch {
-      setLogoState('idle-empty');
-    }
-  }, []);
-
   useEffect(() => {
-    loadInitialStatus();
-  }, [loadInitialStatus]);
+    let active = true;
+
+    assetService.getLogoStatus()
+      .then((data) => {
+        if (!active) return;
+        if (data.logo_thumb_url) {
+          setLogoUrls(data);
+          setLogoState('idle-has-logo');
+        } else {
+          setLogoState('idle-empty');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLogoState('idle-empty');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Upload method
   const uploadLogo = useCallback(async (file: File) => {

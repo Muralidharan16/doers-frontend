@@ -76,23 +76,29 @@ export function useCoverUpload() {
     }, 2000);
   }, [clearPolling]);
 
-  const loadInitialStatus = useCallback(async () => {
-    try {
-      const data = await assetService.getCoverStatus();
-      if (data.cover_desktop_url) {
-        setCoverUrls(data);
-        setCoverState('ready');
-      } else {
-        setCoverState('idle-empty');
-      }
-    } catch {
-      setCoverState('idle-empty');
-    }
-  }, []);
-
   useEffect(() => {
-    loadInitialStatus();
-  }, [loadInitialStatus]);
+    let active = true;
+
+    assetService.getCoverStatus()
+      .then((data) => {
+        if (!active) return;
+        if (data.cover_desktop_url) {
+          setCoverUrls(data);
+          setCoverState('ready');
+        } else {
+          setCoverState('idle-empty');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCoverState('idle-empty');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Upload method with focal Y input
   const uploadCover = useCallback(async (file: File, focalY: number) => {

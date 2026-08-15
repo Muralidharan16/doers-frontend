@@ -98,8 +98,9 @@ export default function OnboardingPage() {
         navigate('/dashboard', { replace: true });
       }, 2000);
     },
-    onError: (err: any) => {
-      if (err.response?.status === 409) {
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } } | null)?.response?.status;
+      if (status === 409) {
         setSuccessStep(true);
         setTimeout(() => {
           completeOnboarding();
