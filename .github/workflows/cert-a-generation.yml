@@ -122,10 +122,7 @@ jobs:
             throw new Error(`manifest plugin-react must remain compatible 5.x, got ${pkg.devDependencies['@vitejs/plugin-react']}`);
           }
           console.log(`manifest plugin-react=${pkg.devDependencies['@vitejs/plugin-react']}`);
-          if (!/^\^8\.5\.(?:1[89]|[2-9]\d|\d{3,})$/.test(pkg.devDependencies.postcss) && pkg.devDependencies.postcss !== '^8.5.18') {
-            throw new Error(`manifest postcss floor unexpected: ${pkg.devDependencies.postcss}`);
-          }
-          console.log(`manifest postcss=${pkg.devDependencies.postcss}`);
+          requireEqual(pkg.devDependencies.postcss, '^8.5.18', 'manifest postcss');
           requireEqual(pkg.devDependencies.vitest, '4.1.9', 'manifest vitest');
           if (pkg.dependencies?.esbuild || pkg.devDependencies?.esbuild) throw new Error('top-level manifest esbuild must be absent');
           console.log('manifest esbuild=absent');
@@ -143,8 +140,6 @@ jobs:
           console.log(`lock esbuild=${esbuild}`);
           requireEqual(versionAt('node_modules/vitest'), '4.1.9', 'lock vitest');
           NODE
-
-          npm ls vite @vitejs/plugin-react axios form-data postcss brace-expansion esbuild vitest --all 2>&1 | tee cert-a-evidence/npm-target-tree.txt
           git diff -- "$CERT_A_PARENT" -- package.json package-lock.json > cert-a-evidence/dependency.diff
 
       - name: Clean install
@@ -153,6 +148,7 @@ jobs:
           set -euo pipefail
           rm -rf node_modules
           npm ci 2>&1 | tee cert-a-evidence/npm-ci.log
+          npm ls vite @vitejs/plugin-react axios form-data postcss brace-expansion esbuild vitest --all 2>&1 | tee cert-a-evidence/npm-target-tree.txt
 
       - name: Capture and enforce audit evidence
         shell: bash
