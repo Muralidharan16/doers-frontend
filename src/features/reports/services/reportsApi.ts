@@ -10,9 +10,9 @@ import type {
  * Backend returns { status: "success", data: T, message: "" }
  * This helper extracts the 'data' field.
  */
-const unwrap = <T>(payload: any): T => {
+const unwrap = <T>(payload: unknown): T => {
   if (payload && typeof payload === 'object' && 'data' in payload) {
-    return payload.data as T;
+    return (payload as { data: T }).data;
   }
   return payload as T;
 };

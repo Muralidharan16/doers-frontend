@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { assetService } from '@/lib/services/assetService';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 import type { CoverStatusResponse } from '@/types/assets';
 
 export type CoverUploadState = 'idle-empty' | 'focal-picking' | 'uploading' | 'processing' | 'ready' | 'failed' | 'deleting';
@@ -66,32 +67,38 @@ export function useCoverUpload() {
           setCoverState('failed');
           setError('Antivirus scan or image validation failed.');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Fail closed on status check errors
         clearPolling();
         setCoverState('failed');
-        setError(err.response?.data?.detail || 'Failed to verify cover status.');
+        setError(getApiErrorMessage(err, 'Failed to verify cover status.'));
       }
     }, 2000);
   }, [clearPolling]);
 
-  const loadInitialStatus = useCallback(async () => {
-    try {
-      const data = await assetService.getCoverStatus();
-      if (data.cover_desktop_url) {
-        setCoverUrls(data);
-        setCoverState('ready');
-      } else {
-        setCoverState('idle-empty');
-      }
-    } catch {
-      setCoverState('idle-empty');
-    }
-  }, []);
-
   useEffect(() => {
-    loadInitialStatus();
-  }, [loadInitialStatus]);
+    let active = true;
+
+    assetService.getCoverStatus()
+      .then((data) => {
+        if (!active) return;
+        if (data.cover_desktop_url) {
+          setCoverUrls(data);
+          setCoverState('ready');
+        } else {
+          setCoverState('idle-empty');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCoverState('idle-empty');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Upload method with focal Y input
   const uploadCover = useCallback(async (file: File, focalY: number) => {
@@ -146,9 +153,9 @@ export function useCoverUpload() {
 
       // Step 4: Begin polling for status
       pollStatus();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setCoverState('failed');
-      setError(err.message || 'Cover upload failed. Please try again.');
+      setError(getApiErrorMessage(err, err instanceof Error ? err.message : 'Cover upload failed. Please try again.'));
     }
   }, [pollStatus]);
 
@@ -161,9 +168,9 @@ export function useCoverUpload() {
       setCoverUrls(null);
       setCoverState('idle-empty');
       setProgress(0);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setCoverState('ready');
-      setError(err.response?.data?.detail || 'Failed to remove cover photo.');
+      setError(getApiErrorMessage(err, 'Failed to remove cover photo.'));
     }
   }, []);
 

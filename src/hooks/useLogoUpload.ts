@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { assetService } from '@/lib/services/assetService';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 import type { LogoStatusResponse } from '@/types/assets';
 
 export type UploadState = 'idle-empty' | 'idle-has-logo' | 'uploading' | 'processing' | 'ready' | 'failed' | 'deleting';
@@ -67,32 +68,38 @@ export function useLogoUpload() {
           setLogoState('failed');
           setError('Antivirus scan or image validation failed.');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Fail closed on status check errors
         clearPolling();
         setLogoState('failed');
-        setError(err.response?.data?.detail || 'Failed to verify logo status.');
+        setError(getApiErrorMessage(err, 'Failed to verify logo status.'));
       }
     }, 2000);
   }, [clearPolling]);
 
-  const loadInitialStatus = useCallback(async () => {
-    try {
-      const data = await assetService.getLogoStatus();
-      if (data.logo_thumb_url) {
-        setLogoUrls(data);
-        setLogoState('idle-has-logo');
-      } else {
-        setLogoState('idle-empty');
-      }
-    } catch {
-      setLogoState('idle-empty');
-    }
-  }, []);
-
   useEffect(() => {
-    loadInitialStatus();
-  }, [loadInitialStatus]);
+    let active = true;
+
+    assetService.getLogoStatus()
+      .then((data) => {
+        if (!active) return;
+        if (data.logo_thumb_url) {
+          setLogoUrls(data);
+          setLogoState('idle-has-logo');
+        } else {
+          setLogoState('idle-empty');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLogoState('idle-empty');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Upload method
   const uploadLogo = useCallback(async (file: File) => {
@@ -139,9 +146,9 @@ export function useLogoUpload() {
 
       // Step 4: Begin polling for status
       pollStatus();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLogoState('failed');
-      setError(err.message || 'Logo upload failed. Please try again.');
+      setError(getApiErrorMessage(err, err instanceof Error ? err.message : 'Logo upload failed. Please try again.'));
     }
   }, [pollStatus]);
 
@@ -155,9 +162,9 @@ export function useLogoUpload() {
       setLogoState('idle-empty');
       setProgress(0);
       window.dispatchEvent(new CustomEvent('logo-updated', { detail: null }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLogoState('idle-has-logo');
-      setError(err.response?.data?.detail || 'Failed to remove logo.');
+      setError(getApiErrorMessage(err, 'Failed to remove logo.'));
     }
   }, []);
 

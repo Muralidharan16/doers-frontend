@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 
 export type ConfirmationDialogProps = {
@@ -49,53 +49,7 @@ export function ConfirmationDialog({
   const [isConfirming, setIsConfirming] = useState(false);
   const isPending = pending || isConfirming;
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const focusTarget = cancelButtonRef.current && !cancelButtonRef.current.disabled
-      ? cancelButtonRef.current
-      : getFocusableElements(dialogRef.current)[0] ?? dialogRef.current;
-    focusTarget?.focus();
-
-    return () => {
-      const trigger = triggerRef?.current;
-      if (trigger && typeof trigger.focus === 'function') {
-        trigger.focus();
-      }
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (!isPending) {
-          onCancel();
-        }
-        return;
-      }
-
-      if (event.key === 'Tab') {
-        containFocus(event);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isPending, onCancel, open]);
-
-  if (!open) return null;
-
-  const containFocus = (event: KeyboardEvent) => {
+  const containFocus = useCallback((event: KeyboardEvent) => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
@@ -122,7 +76,53 @@ export function ConfirmationDialog({
       event.preventDefault();
       firstElement.focus();
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const trigger = triggerRef?.current;
+    const focusTarget = cancelButtonRef.current && !cancelButtonRef.current.disabled
+      ? cancelButtonRef.current
+      : getFocusableElements(dialogRef.current)[0] ?? dialogRef.current;
+    focusTarget?.focus();
+
+    return () => {
+      if (trigger && typeof trigger.focus === 'function') {
+        trigger.focus();
+      }
+    };
+  }, [open, triggerRef]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!isPending) {
+          onCancel();
+        }
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        containFocus(event);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [containFocus, isPending, onCancel, open]);
+
+  if (!open) return null;
 
   const handleConfirm = async () => {
     if (isPending || confirmingRef.current) return;

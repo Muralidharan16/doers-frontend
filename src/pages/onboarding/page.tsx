@@ -98,8 +98,9 @@ export default function OnboardingPage() {
         navigate('/dashboard', { replace: true });
       }, 2000);
     },
-    onError: (err: any) => {
-      if (err.response?.status === 409) {
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } } | null)?.response?.status;
+      if (status === 409) {
         setSuccessStep(true);
         setTimeout(() => {
           completeOnboarding();
@@ -212,7 +213,7 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              {completeMutation.error && (
+              {completeMutation.error != null && (
                 <div 
                   className="p-3 rounded-[var(--radius-md)] text-[10px] font-mono text-center uppercase tracking-wider"
                   style={{ 

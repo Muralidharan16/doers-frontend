@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { gymApi, type Gym } from '../services/gymApi';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 
 interface BranchState {
   branches: Gym[];
@@ -43,8 +44,8 @@ export const useBranchStore = create<BranchState>()(
             isLoading: false 
           });
           return activeBranches;
-        } catch (err: any) {
-          const errorMsg = err?.response?.data?.detail?.message || err?.message || 'Failed to fetch branches';
+        } catch (err: unknown) {
+          const errorMsg = getApiErrorMessage(err, 'Failed to fetch branches');
           set({ isLoading: false, error: errorMsg });
           throw err;
         }

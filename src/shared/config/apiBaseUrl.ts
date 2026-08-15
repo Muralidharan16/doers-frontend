@@ -71,7 +71,7 @@ export function resolveApiBaseUrl(
   let url: URL;
   try {
     url = new URL(trimmed);
-  } catch (e) {
+  } catch {
     throw new ApiBaseUrlError(
       'DOERS API configuration is invalid. Set VITE_API_BASE_URL to a same-origin path such as /api or to an HTTPS API URL.',
       'DOERS_API_BASE_URL_INVALID'

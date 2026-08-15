@@ -36,7 +36,6 @@ export function resolveProductionApiBaseUrl(rawValue) {
     );
   }
 
-  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1F\x7F]/.test(rawString)) {
     throw new ApiBaseUrlError(
       'DOERS API configuration cannot contain control characters.',

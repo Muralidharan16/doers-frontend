@@ -189,6 +189,10 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
     }
   };
 
+  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    void handleSubmit(onSubmit)(event);
+  };
+
   const getContactIdentifier = (contact: BranchContact | null) => {
     if (!contact) return 'this contact';
     return (
@@ -414,7 +418,7 @@ export const BranchContactsSection: React.FC<BranchContactsSectionProps> = ({ br
               </div>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={handleFormSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">Type</label>

@@ -7,6 +7,10 @@ vi.mock('@/features/reports/hooks/useDashboard', () => ({
   useAttendance: vi.fn(),
 }));
 
+type AttendanceResult = ReturnType<typeof reportsHooks.useAttendance>;
+
+const attendanceResult = (value: Partial<AttendanceResult>): AttendanceResult => value as AttendanceResult;
+
 describe('AttendancePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,7 +27,7 @@ describe('AttendancePage', () => {
   };
 
   it('Test 1 — populated real API distribution', () => {
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [
           { hour: 6, count: 12 },
@@ -34,7 +38,7 @@ describe('AttendancePage', () => {
       isPending: false,
       isLoading: false,
       isError: false
-    } as any);
+    }));
 
     render(<AttendancePage />);
 
@@ -56,12 +60,12 @@ describe('AttendancePage', () => {
   });
 
   it('Test 2 — pending state', () => {
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: undefined,
       isPending: true,
       isLoading: true,
       isError: false
-    } as any);
+    }));
 
     render(<AttendancePage />);
 
@@ -74,12 +78,12 @@ describe('AttendancePage', () => {
   });
 
   it('Test 3 — error state', () => {
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: undefined,
       isPending: false,
       isLoading: false,
       isError: true
-    } as any);
+    }));
 
     render(<AttendancePage />);
 
@@ -93,7 +97,7 @@ describe('AttendancePage', () => {
   });
 
   it('Test 4 — successful empty state', () => {
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [],
         days_analyzed: 30
@@ -101,7 +105,7 @@ describe('AttendancePage', () => {
       isPending: false,
       isLoading: false,
       isError: false
-    } as any);
+    }));
 
     render(<AttendancePage />);
 
@@ -115,7 +119,7 @@ describe('AttendancePage', () => {
   });
 
   it('Test 5 — fabricated-content exclusion', () => {
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [
           { hour: 6, count: 12 }
@@ -125,7 +129,7 @@ describe('AttendancePage', () => {
       isPending: false,
       isLoading: false,
       isError: false
-    } as any);
+    }));
 
     render(<AttendancePage />);
 
@@ -145,7 +149,7 @@ describe('AttendancePage', () => {
   });
 
   it('Test 6 — all-zero non-empty response', () => {
-    vi.mocked(reportsHooks.useAttendance).mockReturnValue({
+    vi.mocked(reportsHooks.useAttendance).mockReturnValue(attendanceResult({
       data: {
         hours: [
           { hour: 6, count: 0 },
@@ -156,7 +160,7 @@ describe('AttendancePage', () => {
       isPending: false,
       isLoading: false,
       isError: false
-    } as any);
+    }));
 
     render(<AttendancePage />);
 
