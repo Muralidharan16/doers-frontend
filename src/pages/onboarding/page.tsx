@@ -213,7 +213,7 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              {completeMutation.error && (
+              {completeMutation.error != null && (
                 <div 
                   className="p-3 rounded-[var(--radius-md)] text-[10px] font-mono text-center uppercase tracking-wider"
                   style={{ 
