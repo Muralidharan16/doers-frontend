@@ -33,7 +33,7 @@ export const OrganizationBrandingSection: React.FC = () => {
           id: profile.id,
           name: profile.name,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         setError('Failed to sync branding parameters.');
         console.error(err);
       } finally {

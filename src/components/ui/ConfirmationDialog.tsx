@@ -59,18 +59,18 @@ export function ConfirmationDialog({
   useEffect(() => {
     if (!open) return;
 
+    const trigger = triggerRef?.current;
     const focusTarget = cancelButtonRef.current && !cancelButtonRef.current.disabled
       ? cancelButtonRef.current
       : getFocusableElements(dialogRef.current)[0] ?? dialogRef.current;
     focusTarget?.focus();
 
     return () => {
-      const trigger = triggerRef?.current;
       if (trigger && typeof trigger.focus === 'function') {
         trigger.focus();
       }
     };
-  }, [open]);
+  }, [open, triggerRef]);
 
   useEffect(() => {
     if (!open) return;

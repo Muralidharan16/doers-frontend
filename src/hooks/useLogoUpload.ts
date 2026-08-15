@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { assetService } from '@/lib/services/assetService';
+import { getApiErrorMessage } from '@/shared/lib/apiError';
 import type { LogoStatusResponse } from '@/types/assets';
 
 export type UploadState = 'idle-empty' | 'idle-has-logo' | 'uploading' | 'processing' | 'ready' | 'failed' | 'deleting';
@@ -67,11 +68,11 @@ export function useLogoUpload() {
           setLogoState('failed');
           setError('Antivirus scan or image validation failed.');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Fail closed on status check errors
         clearPolling();
         setLogoState('failed');
-        setError(err.response?.data?.detail || 'Failed to verify logo status.');
+        setError(getApiErrorMessage(err, 'Failed to verify logo status.'));
       }
     }, 2000);
   }, [clearPolling]);
@@ -139,9 +140,9 @@ export function useLogoUpload() {
 
       // Step 4: Begin polling for status
       pollStatus();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLogoState('failed');
-      setError(err.message || 'Logo upload failed. Please try again.');
+      setError(getApiErrorMessage(err, err instanceof Error ? err.message : 'Logo upload failed. Please try again.'));
     }
   }, [pollStatus]);
 
@@ -155,9 +156,9 @@ export function useLogoUpload() {
       setLogoState('idle-empty');
       setProgress(0);
       window.dispatchEvent(new CustomEvent('logo-updated', { detail: null }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLogoState('idle-has-logo');
-      setError(err.response?.data?.detail || 'Failed to remove logo.');
+      setError(getApiErrorMessage(err, 'Failed to remove logo.'));
     }
   }, []);
 

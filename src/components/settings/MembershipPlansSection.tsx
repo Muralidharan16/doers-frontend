@@ -82,7 +82,7 @@ export const MembershipPlansSection: React.FC = () => {
         e?.message ||
         'The membership plan could not be updated. Please try again.';
       setActionError(errorMsg);
-      throw new Error(errorMsg);
+      throw new Error(errorMsg, { cause: err });
     } finally {
       setLoadingAction(null);
     }
@@ -117,7 +117,7 @@ export const MembershipPlansSection: React.FC = () => {
         e?.message ||
         'The membership plan could not be updated. Please try again.';
       setActionError(errorMsg);
-      throw new Error(errorMsg);
+      throw new Error(errorMsg, { cause: err });
     } finally {
       setLoadingAction(null);
     }
