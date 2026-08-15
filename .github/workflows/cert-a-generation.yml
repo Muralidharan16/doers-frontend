@@ -6,7 +6,7 @@ on:
       - tmp/cert-a-generation-20260815
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: cert-a-temp-generation
@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   generate-and-certify:
+    if: ${{ !contains(github.event.head_commit.message, '[cert-a-generated]') }}
     name: Generate and certify warning-clean dependency candidate
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -25,7 +26,7 @@ jobs:
       - name: Check out temporary generation ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          persist-credentials: true
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -164,9 +165,7 @@ jobs:
           node <<'NODE' | tee cert-a-evidence/resolved-targets.txt
           import fs from 'node:fs';
           const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-          for (const path of ['node_modules/axios','node_modules/form-data','node_modules/react-router-dom','node_modules/react-router','node_modules/vite','node_modules/@vitejs/plugin-react','node_modules/postcss','node_modules/brace-expansion','node_modules/esbuild','node_modules/@babel/core','node_modules/undici','node_modules/vitest']) {
-            console.log(`${path}=${lock.packages[path]?.version ?? 'MISSING'}`);
-          }
+          for (const path of ['node_modules/axios','node_modules/form-data','node_modules/react-router-dom','node_modules/react-router','node_modules/vite','node_modules/@vitejs/plugin-react','node_modules/postcss','node_modules/brace-expansion','node_modules/esbuild','node_modules/@babel/core','node_modules/undici','node_modules/vitest']) console.log(`${path}=${lock.packages[path]?.version ?? 'MISSING'}`);
           NODE
 
       - name: Clean install and dependency tree
@@ -230,7 +229,6 @@ jobs:
           cat cert-a-evidence/tests.log cert-a-evidence/platform-billing.log cert-a-evidence/build.log > cert-a-evidence/toolchain-output.log
           if grep -Eiq '(vite|oxc|esbuild).*(warn|deprecat)|(warn|deprecat).*(vite|oxc|esbuild)|Both esbuild and oxc options were set' cert-a-evidence/toolchain-output.log; then
             echo 'CERT-A warning gate failed: Vite/Oxc/esbuild warning or deprecation detected.' >&2
-            grep -Ein '(vite|oxc|esbuild).*(warn|deprecat)|(warn|deprecat).*(vite|oxc|esbuild)|Both esbuild and oxc options were set' cert-a-evidence/toolchain-output.log >&2 || true
             exit 1
           fi
 
@@ -239,35 +237,44 @@ jobs:
         run: |
           set -euo pipefail
           git diff --exit-code "$CERT_A_PARENT" -- src vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json
-          git diff --name-only "$CERT_A_PARENT" | tee cert-a-evidence/final-working-tree-files.txt
+          test -z "$(git ls-files --others --exclude-standard src)"
+          test "$(git ls-files --others --exclude-standard scripts)" = "scripts/verify-supply-chain.mjs"
+          git diff --name-only "$CERT_A_PARENT" | tee cert-a-evidence/final-tracked-files.txt
           node <<'NODE'
           import { execFileSync } from 'node:child_process';
           const files = execFileSync('git', ['diff','--name-only',process.env.CERT_A_PARENT], {encoding:'utf8'}).trim().split('\n').filter(Boolean).sort();
-          const allowed = ['.github/workflows/cert-a-generation.yml','.github/workflows/frontend-quality.yml','package-lock.json','package.json','scripts/verify-supply-chain.mjs','vitest.config.ts'].sort();
-          if (JSON.stringify(files) !== JSON.stringify(allowed)) throw new Error(`unexpected changed files: ${JSON.stringify(files)}`);
+          const allowed = ['.github/workflows/cert-a-generation.yml','.github/workflows/frontend-quality.yml','package-lock.json','package.json','vitest.config.ts'].sort();
+          if (JSON.stringify(files) !== JSON.stringify(allowed)) throw new Error(`unexpected tracked files: ${JSON.stringify(files)}`);
           NODE
           git diff --check "$CERT_A_PARENT"
 
-      - name: Package candidate files and evidence
+      - name: Publish generated files to temporary lane only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Muralidharan16'
+          git config user.email '145135907+Muralidharan16@users.noreply.github.com'
+          git add package.json package-lock.json vitest.config.ts scripts/verify-supply-chain.mjs .github/workflows/frontend-quality.yml
+          git diff --cached --check
+          git commit -m 'chore: stage CERT-A generated candidate [cert-a-generated] [skip ci]'
+          git push origin HEAD:tmp/cert-a-generation-20260815
+          git rev-parse HEAD | tee cert-a-evidence/generated-temp-commit.txt
+
+      - name: Package evidence
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p cert-a-output/candidate/.github/workflows cert-a-output/candidate/scripts
-          cp package.json cert-a-output/candidate/package.json
-          cp package-lock.json cert-a-output/candidate/package-lock.json
-          cp vitest.config.ts cert-a-output/candidate/vitest.config.ts
-          cp .github/workflows/frontend-quality.yml cert-a-output/candidate/.github/workflows/frontend-quality.yml
-          cp scripts/verify-supply-chain.mjs cert-a-output/candidate/scripts/verify-supply-chain.mjs
+          mkdir -p cert-a-output
           cp -R cert-a-evidence cert-a-output/evidence
           printf '%s\n' "$CERT_A_PARENT" > cert-a-output/PARENT_SHA.txt
           git rev-parse HEAD > cert-a-output/GENERATION_REF_SHA.txt
 
-      - name: Upload CERT-A warning-clean candidate artifact
+      - name: Upload CERT-A evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cert-a-warning-clean-${{ github.run_id }}
+          name: cert-a-green-${{ github.run_id }}
           path: cert-a-output
           if-no-files-found: error
           retention-days: 3
