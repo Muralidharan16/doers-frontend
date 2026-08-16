@@ -246,6 +246,7 @@ jobs:
         run: |
           set -euo pipefail
           sed "s|__FRONTEND_DIST__|$GITHUB_WORKSPACE/dist|g" cert-b/nginx.conf >/tmp/doers-cert-b/nginx.conf
+          sudo nginx -t -c /tmp/doers-cert-b/nginx.conf
           sudo nginx -c /tmp/doers-cert-b/nginx.conf
           curl --fail --silent --show-error --insecure --resolve cert-b.local:8443:127.0.0.1 \
             https://cert-b.local:8443/signup >/dev/null
