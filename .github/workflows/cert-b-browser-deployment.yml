@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CERT_B_BACKEND_SHA: b1214b721e71f9abd1a4a7e71c34263d19682d26
+  CERT_B_BACKEND_SHA: b537dfaf432c7304dafbb983ee4d772938da2d41
   CERT_B_ORIGIN: https://cert-b.local:8443
   CERT_B_MAILBOX: /tmp/doers-cert-b/mailbox.jsonl
 
@@ -198,7 +198,8 @@ jobs:
           CELERY_WORKER_PROFILE: ''
           SECRET_KEY: cert-b-production-secret-key-0123456789abcdef
           INTERNAL_CONTROL_TOKEN: cert-b-control-token-abcdef0123456789-9876543210
-          BACKEND_BASE_URL: https://cert-b.local:8443/api
+          BACKEND_BASE_URL: https://cert-b.local:8443
+          PUBLIC_API_PATH_PREFIX: /api
           FRONTEND_URL: https://cert-b.local:8443
           CORS_ORIGINS: https://cert-b.local:8443
           MAIL_PROVIDER: smtp

@@ -68,7 +68,7 @@ async function signupAndVerify(browser, suffix) {
   assert.equal(pollCookie.httpOnly, true);
   assert.equal(pollCookie.secure, true);
   assert.equal(pollCookie.sameSite, 'Lax');
-  assert.equal(pollCookie.path, '/auth');
+  assert.equal(pollCookie.path, '/api/auth');
 
   const verifyUrl = await waitForVerification(email);
   const verifyPage = await context.newPage();
@@ -89,7 +89,7 @@ async function signupAndVerify(browser, suffix) {
     assert.equal(cookie.sameSite, 'Lax');
   }
   assert.equal(access.path, '/');
-  assert.equal(refresh.path, '/auth');
+  assert.equal(refresh.path, '/api/auth');
   assert.equal(cookies.some((cookie) => cookie.name === 'signup_poll_token'), false);
 
   const session = await page.evaluate(async () => {
