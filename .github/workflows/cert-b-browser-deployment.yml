@@ -23,16 +23,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: doers
-        ports: [5432:5432]
-        options: >-
-          --health-cmd "pg_isready -U postgres -d doers"
-          --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
         image: redis:7
         ports: [6379:6379]
@@ -80,7 +70,16 @@ jobs:
           npm install --prefix /tmp/doers-cert-b-playwright --no-save --no-package-lock 'playwright@1.62.0'
           /tmp/doers-cert-b-playwright/node_modules/.bin/playwright install --with-deps chromium
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends nginx postgresql-client
+          sudo apt-get install -y --no-install-recommends \
+            nginx \
+            postgresql-16 \
+            postgresql-client-16 \
+            postgresql-contrib \
+            postgresql-16-partman \
+            postgresql-16-postgis-3
+          sudo systemctl start postgresql
+          pg_config --version
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d postgres -c 'SELECT version();'
 
       - name: Prepare HTTPS and local DNS
         run: |
@@ -92,18 +91,50 @@ jobs:
             -subj '/CN=cert-b.local' -addext 'subjectAltName=DNS:cert-b.local'
 
       - name: Bootstrap canonical cluster roles
-        env:
-          PGPASSWORD: postgres
+        working-directory: backend
         run: |
           set -euo pipefail
-          python -s backend/scripts/render_cluster_role_bootstrap.py \
-            | psql -X -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1
+          bash scripts/ci/bootstrap_cluster_roles.sh
+
+      - name: Provision exact migration-owner deployment overlay
+        run: |
+          set -euo pipefail
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d postgres <<'SQL'
+          ALTER ROLE migration_owner PASSWORD 'cert_b_migration_password';
+          CREATE DATABASE doers OWNER migration_owner;
+          SQL
+
+      - name: Verify cluster identity contracts before HEAD
+        working-directory: backend
+        env:
+          DOERS_CLUSTER_VERIFY_DATABASE_URL: postgresql+asyncpg://migration_owner:cert_b_migration_password@127.0.0.1:5432/doers
+        run: |
+          set -euo pipefail
+          python -s scripts/verify_cluster_role_bootstrap.py
+          python -s scripts/verify_cluster_identity_graph.py
+
+      - name: Provision infrastructure-owned PostgreSQL extensions
+        run: |
+          set -euo pipefail
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d doers <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS partman AUTHORIZATION postgres;
+          CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
+          CREATE EXTENSION IF NOT EXISTS btree_gist;
+          CREATE EXTENSION IF NOT EXISTS citext;
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+          CREATE EXTENSION IF NOT EXISTS postgis;
+          GRANT USAGE ON SCHEMA partman TO migration_owner;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA partman TO migration_owner;
+          GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA partman TO migration_owner;
+          GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA partman TO migration_owner;
+          GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA partman TO migration_owner;
+          SQL
 
       - name: Migrate a fresh PostgreSQL 16 database to exact HEAD
         working-directory: backend
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/doers
-          AUTH_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/doers
+          DATABASE_URL: postgresql+asyncpg://migration_owner:cert_b_migration_password@127.0.0.1:5432/doers
+          AUTH_DATABASE_URL: postgresql+asyncpg://migration_owner:cert_b_migration_password@127.0.0.1:5432/doers
           REDIS_URL: redis://127.0.0.1:6379/0
           CELERY_BROKER_URL: redis://127.0.0.1:6379/1
           CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/2
@@ -113,19 +144,24 @@ jobs:
           ENVIRONMENT: development
         run: |
           set -euo pipefail
+          identity="$(
+            PGPASSWORD=cert_b_migration_password \
+              psql -XAt -F '|' -h 127.0.0.1 -U migration_owner -d doers \
+                -c 'SELECT current_user, session_user'
+          )"
+          test "$identity" = 'migration_owner|migration_owner'
           alembic upgrade head
           alembic current --check-heads
 
       - name: Bind exact least-privilege runtime identities
-        env:
-          PGPASSWORD: postgres
         run: |
           set -euo pipefail
-          psql -X -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-          CREATE ROLE cert_b_api LOGIN PASSWORD 'cert_b_api_password';
-          CREATE ROLE cert_b_auth LOGIN PASSWORD 'cert_b_auth_password';
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d postgres <<'SQL'
+          CREATE ROLE cert_b_api LOGIN PASSWORD 'cert_b_api_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+          CREATE ROLE cert_b_auth LOGIN PASSWORD 'cert_b_auth_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
           GRANT app_runtime, app_user TO cert_b_api WITH ADMIN FALSE, INHERIT TRUE, SET FALSE;
           GRANT auth_runtime, app_user TO cert_b_auth WITH ADMIN FALSE, INHERIT TRUE, SET FALSE;
+          GRANT CONNECT ON DATABASE doers TO cert_b_api, cert_b_auth;
           ALTER ROLE cert_b_api SET row_security = on;
           ALTER ROLE cert_b_api SET statement_timeout = '5s';
           ALTER ROLE cert_b_api SET lock_timeout = '2s';
