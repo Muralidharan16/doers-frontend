@@ -242,10 +242,19 @@ jobs:
           npm run test:platform-billing
           npm run build
 
+      - name: Stage production bundle for Nginx
+        run: |
+          set -euo pipefail
+          install -d -m 0755 /tmp/doers-cert-b/www
+          cp -R dist/. /tmp/doers-cert-b/www/
+          chmod -R u=rwX,go=rX /tmp/doers-cert-b/www
+          sudo -u www-data test -r /tmp/doers-cert-b/www/index.html
+          sudo -u www-data cat /tmp/doers-cert-b/www/index.html >/dev/null
+
       - name: Start same-origin HTTPS production edge
         run: |
           set -euo pipefail
-          sed "s|__FRONTEND_DIST__|$GITHUB_WORKSPACE/dist|g" cert-b/nginx.conf >/tmp/doers-cert-b/nginx.conf
+          sed "s|__FRONTEND_DIST__|/tmp/doers-cert-b/www|g" cert-b/nginx.conf >/tmp/doers-cert-b/nginx.conf
           sudo nginx -t -c /tmp/doers-cert-b/nginx.conf
           sudo nginx -c /tmp/doers-cert-b/nginx.conf
           curl --fail --silent --show-error --insecure --resolve cert-b.local:8443:127.0.0.1 \
