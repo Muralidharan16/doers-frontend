@@ -5,7 +5,6 @@ import { ThemeToggle } from '../ui/ThemeToggle';
 import { useAuthStore } from '@/features/auth';
 import { useBranchStore } from '@/features/gym';
 import { BranchSelector } from './BranchSelector';
-import { authApi } from '@/features/auth/services/authApi';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -16,22 +15,8 @@ export function AppShell({ children }: AppShellProps) {
   const user = useAuthStore((s) => s.user);
   const fetchBranches = useBranchStore((s) => s.fetchBranches);
 
-  // Fetch branches and sync user details on mount
   useEffect(() => {
     fetchBranches().catch(() => {});
-    
-    const syncUser = async () => {
-      try {
-        const currentUser = await authApi.getMe();
-        if (currentUser) {
-          useAuthStore.setState({ user: currentUser });
-        }
-      } catch (err) {
-        console.error('Failed to sync current user profile:', err);
-      }
-    };
-    
-    syncUser();
   }, [fetchBranches]);
 
   const formatName = (name: string) => {
@@ -39,7 +24,6 @@ export function AppShell({ children }: AppShellProps) {
     return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
   };
 
-  // Prevent scroll when mobile drawer is open
   useEffect(() => {
     if (isSidebarOpen) {
       document.body.style.overflow = 'hidden';
@@ -58,7 +42,6 @@ export function AppShell({ children }: AppShellProps) {
       <div 
         className="flex-1 flex flex-col min-w-0 transition-all duration-300 lg:ml-[248px]"
       >
-        {/* Navbar */}
         <header 
           className="fixed top-0 right-0 left-0 lg:left-[248px] z-40 flex items-center justify-between px-6 transition-all duration-300"
           style={{ 
@@ -67,7 +50,6 @@ export function AppShell({ children }: AppShellProps) {
             borderBottom: '0.5px solid var(--border-default)' 
           }}
         >
-          {/* Left Side: Mobile Toggler & Branding */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsSidebarOpen(true)}
@@ -82,10 +64,10 @@ export function AppShell({ children }: AppShellProps) {
                   width: '28px', 
                   height: '28px', 
                   backgroundColor: 'var(--accent)', 
-                  borderRadius: '4px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   border: 'none' 
                 }}
               >
@@ -100,7 +82,6 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </div>
 
-          {/* Right Side: Theme Toggle & Branch Selector */}
           <div className="flex items-center gap-4">
             <ThemeToggle />
             <BranchSelector />
@@ -114,7 +95,6 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </header>
 
-        {/* Content Body */}
         <main className="flex-1 p-6 md:p-8 pt-[calc(var(--navbar-height)+1.5rem)] md:pt-[calc(var(--navbar-height)+2rem)] transition-all duration-300">
           {children}
         </main>

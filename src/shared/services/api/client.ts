@@ -1,6 +1,9 @@
-import axios from 'axios';
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { useTrialLockStore, type TrialLockCode } from '@/features/trial/store/trialLockStore';
-import { useAuthStore } from '@/features/auth/store/authStore';
+import {
+  broadcastSignedOut,
+  useAuthStore,
+} from '@/features/auth/store/authStore';
 import { resolveApiBaseUrl } from '../../config/apiBaseUrl';
 
 const API_BASE_URL = resolveApiBaseUrl(
@@ -14,8 +17,15 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-let isRefreshing = false;
-let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
+const refreshClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+type ErrorPayload = { detail?: { code?: TrialLockCode; message?: string } };
+type SessionRoutingMetadata = { org_id: string; role: string };
 
 const publicAuthRoutes = [
   '/auth/login',
@@ -24,56 +34,46 @@ const publicAuthRoutes = [
   '/auth/resend-verification',
   '/auth/signup-status',
   '/auth/refresh',
+  '/auth/logout',
 ];
 
 const isPublicAuthRoute = (url?: string): boolean =>
   Boolean(url && publicAuthRoutes.some((route) => url.includes(route)));
 
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token as string);
-    }
-  });
-  failedQueue = [];
+let refreshPromise: Promise<void> | null = null;
+
+const refreshBrowserSession = (): Promise<void> => {
+  if (!refreshPromise) {
+    refreshPromise = refreshClient
+      .post('/auth/refresh')
+      .then(() => undefined)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
 };
 
-// Add request interceptor to attach token
-apiClient.interceptors.request.use((config) => {
-  if (isPublicAuthRoute(config.url)) {
-    if (config.headers) {
-      delete config.headers.Authorization;
-    }
-    return config;
+const failClosedBrowserSession = (): void => {
+  useAuthStore.getState().clearAuth();
+  window.localStorage.removeItem('branch-storage');
+  broadcastSignedOut();
+  if (window.location.pathname !== '/login') {
+    window.location.assign('/login');
   }
-
-  const tokensRaw = localStorage.getItem('auth-storage');
-  if (tokensRaw) {
-    try {
-      const parsed = JSON.parse(tokensRaw);
-      const tokens = parsed?.state?.tokens ?? parsed?.tokens;
-      if (tokens?.access_token) {
-        config.headers.Authorization = `Bearer ${tokens.access_token}`;
-      }
-    } catch {
-      // ignore parse error
-    }
-  }
-  return config;
-});
+};
 
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const detail = error?.response?.data?.detail;
-    const code = detail?.code as TrialLockCode | undefined;
+  async (error: AxiosError) => {
+    const payload = error.response?.data as ErrorPayload | undefined;
+    const detail = payload?.detail;
+    const code = detail?.code;
 
     if (code === 'SOFT_LOCKED' || code === 'HARD_LOCKED') {
       useTrialLockStore.getState().setLock(
         code,
-        detail?.message || 'Your trial access needs attention.'
+        detail?.message || 'Your trial access needs attention.',
       );
 
       if (code === 'HARD_LOCKED' && window.location.pathname !== '/subscription-required') {
@@ -81,130 +81,42 @@ apiClient.interceptors.response.use(
       }
     }
 
-    const originalRequest = error.config;
+    const originalRequest = error.config as RetryableRequestConfig | undefined;
     if (
-      error.response?.status === 401 && 
-      !originalRequest._retry && 
-      originalRequest.url !== '/auth/refresh' && 
-      originalRequest.url !== '/auth/login'
+      error.response?.status !== 401 ||
+      !originalRequest ||
+      originalRequest._retry ||
+      isPublicAuthRoute(originalRequest.url)
     ) {
-      if (isRefreshing) {
-        return new Promise<string>((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return apiClient(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        const tokensRaw = localStorage.getItem('auth-storage');
-        const parsed = tokensRaw ? JSON.parse(tokensRaw) : null;
-        const refreshToken = parsed?.state?.tokens?.refresh_token ?? parsed?.tokens?.refresh_token;
-
-        if (!refreshToken) throw new Error('No refresh token available');
-
-        const { data } = await axios.post(
-          `${apiClient.defaults.baseURL}/auth/refresh`,
-          { refresh_token: refreshToken },
-          { withCredentials: true }
-        );
-
-        // API might wrap response in `data: {}`
-        const newAccessToken = data?.data?.access_token || data?.access_token;
-        const newRefreshToken = data?.data?.refresh_token || data?.refresh_token;
-
-        if (!newAccessToken || !newRefreshToken) {
-          throw new Error('Refresh response missing tokens');
-        }
-
-        if (newAccessToken && newRefreshToken) {
-          if (parsed?.state?.tokens) {
-            parsed.state.tokens.access_token = newAccessToken;
-            parsed.state.tokens.refresh_token = newRefreshToken;
-            localStorage.setItem('auth-storage', JSON.stringify(parsed));
-          } else if (parsed?.tokens) {
-            parsed.tokens.access_token = newAccessToken;
-            parsed.tokens.refresh_token = newRefreshToken;
-            localStorage.setItem('auth-storage', JSON.stringify(parsed));
-          }
-          useAuthStore.getState().updateTokens({
-            access_token: newAccessToken,
-            refresh_token: newRefreshToken,
-          }, data?.onboarding_completed);
-        }
-
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        processQueue(null, newAccessToken);
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        useAuthStore.getState().clearAuth();
-        localStorage.removeItem('auth-storage');
-        localStorage.removeItem('branch-storage');
-        sessionStorage.removeItem('signup-email');
-        sessionStorage.removeItem('signup-poll-token');
-        if (window.location.pathname !== '/login') {
-          window.location.assign('/login');
-        }
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
-  }
+    originalRequest._retry = true;
+
+    try {
+      await refreshBrowserSession();
+      return apiClient(originalRequest);
+    } catch (refreshError) {
+      failClosedBrowserSession();
+      return Promise.reject(refreshError);
+    }
+  },
 );
 
-// Helper to decode auth token payload
-export const getAuthTokenPayload = (): {
-  org_id?: string;
-  role?: string;
-  sub?: string;
-  email?: string;
-  [key: string]: unknown;
-} | null => {
-  const tokensRaw = localStorage.getItem('auth-storage');
-  if (tokensRaw) {
-    try {
-      const parsed = JSON.parse(tokensRaw);
-      const tokens = parsed?.state?.tokens ?? parsed?.tokens;
-      if (tokens?.access_token) {
-        const parts = tokens.access_token.split('.');
-        if (parts.length === 3) {
-          return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        }
-      }
-    } catch {
-      // ignore
-    }
+/**
+ * @deprecated Legacy call-site name retained only for the PR-02B integration
+ * boundary. This function never reads or decodes a token. It returns non-secret
+ * routing metadata established by the authenticated server session response.
+ */
+export const getAuthTokenPayload = (): SessionRoutingMetadata => {
+  const { status, user } = useAuthStore.getState();
+  if (status !== 'authenticated' || !user) {
+    return { org_id: '', role: 'unauthenticated' };
   }
-  return null;
+  return { org_id: user.org_id, role: user.role };
 };
 
-// Validate that a resource ID matches tenant context if needed
-const validateTenantAccess = () => {
-  const payload = getAuthTokenPayload();
-  if (!payload?.org_id) {
-    throw {
-      response: {
-        status: 403,
-        data: { detail: "Access denied. No tenant ID found in token." }
-      }
-    };
-  }
-};
-
-export const fetchBranches = async () => {
-  validateTenantAccess();
-  return apiClient.get('/branches');
-};
+export const fetchBranches = async () => apiClient.get('/branches');
 
 interface BranchFormPayload {
   name?: string;
@@ -222,65 +134,56 @@ interface BranchFormPayload {
 }
 
 export const addBranch = async (formData: BranchFormPayload) => {
-  validateTenantAccess();
   const payload = {
     name: formData.name,
     internal_code: formData.internal_code,
     address_line1: formData.address_line1,
-    address_line2: formData.address_line2 || "",
+    address_line2: formData.address_line2 || '',
     city: formData.address_city,
     state_province: formData.address_state,
-    country_code: formData.country_code || "IN",
+    country_code: formData.country_code || 'IN',
     postal_code: formData.address_pincode,
     phone: formData.contact_phone,
-    email: formData.contact_email
+    email: formData.contact_email,
   };
   return apiClient.post('/gyms', payload);
 };
 
 export const deleteBranch = async (gymId: string) => {
-  validateTenantAccess();
-  if (!gymId) throw new Error("Branch ID is required");
+  if (!gymId) throw new Error('Branch ID is required');
   return apiClient.delete(`/gyms/${gymId}`);
 };
 
 export const updateBranch = async (gymId: string, formData: BranchFormPayload) => {
-  validateTenantAccess();
-  if (!gymId) throw new Error("Branch ID is required");
-  const payload = {
-    name: formData.name
-  };
-  return apiClient.put(`/gyms/${gymId}`, payload);
+  if (!gymId) throw new Error('Branch ID is required');
+  return apiClient.put(`/gyms/${gymId}`, { name: formData.name });
 };
 
 export const updateAddress = async (addressId: string, formData: BranchFormPayload) => {
-  validateTenantAccess();
-  if (!addressId) throw new Error("Address ID is required");
+  if (!addressId) throw new Error('Address ID is required');
   const payload = {
     address_line1: formData.address_line1,
-    address_line2: formData.address_line2 || "",
+    address_line2: formData.address_line2 || '',
     city: formData.address_city,
     state_province: formData.address_state,
-    country_code: formData.country_code || "IN",
+    country_code: formData.country_code || 'IN',
     postal_code: formData.address_pincode,
-    address_type: "physical",
-    label: formData.name + " Address"
+    address_type: 'physical',
+    label: `${formData.name} Address`,
   };
   return apiClient.patch(`/addresses/${addressId}`, payload);
 };
 
 export const transitionBranchStatus = async (branchId: string, formData: BranchFormPayload) => {
-  validateTenantAccess();
-  if (!branchId) throw new Error("Branch ID is required");
+  if (!branchId) throw new Error('Branch ID is required');
   const payload = {
-    to_status: formData.to_status?.toLowerCase(), // active, maintenance, decommissioned
-    reason: formData.reason || null
+    to_status: formData.to_status?.toLowerCase(),
+    reason: formData.reason || null,
   };
   return apiClient.post(`/branches/${branchId}/transition`, payload);
 };
 
 export const pollTransitionStatus = async (branchId: string) => {
-  validateTenantAccess();
-  if (!branchId) throw new Error("Branch ID is required");
+  if (!branchId) throw new Error('Branch ID is required');
   return apiClient.get(`/branches/${branchId}/state`);
 };

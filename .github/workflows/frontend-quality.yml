@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - hardening/frontend-production-readiness
   push:
     branches:
       - main
@@ -39,11 +40,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify supply-chain version contract
+        run: npm run verify:supply-chain
+
+      - name: Reject High or Critical npm advisories
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
       - name: Run test suite
         run: npm test
+
+      - name: Verify browser session security contract
+        run: npm run verify:browser-session
 
       - name: Run Platform Billing regression suite
         run: npm run test:platform-billing

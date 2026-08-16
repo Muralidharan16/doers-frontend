@@ -1,5 +1,12 @@
 import { apiClient } from '@/shared/services/api/client';
-import type { LoginCredentials, AuthTokens, SignupPayload, AuthResponse, SignupResponse, User } from '../types';
+import type {
+  LoginCredentials,
+  RefreshResponse,
+  SessionResponse,
+  SignupPayload,
+  SignupResponse,
+  SignupStatusResponse,
+} from '../types';
 
 const unwrap = <T>(payload: T | { data: T }): T => {
   if (payload && typeof payload === 'object' && 'data' in payload) {
@@ -9,26 +16,12 @@ const unwrap = <T>(payload: T | { data: T }): T => {
 };
 
 export const authApi = {
-  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
+  login: async (credentials: LoginCredentials): Promise<SessionResponse> => {
     const response = await apiClient.post('/auth/login', {
       ...credentials,
       email: credentials.email.trim().toLowerCase(),
     });
-    const data = unwrap<{
-      user: AuthResponse['user'];
-      access_token: string;
-      refresh_token: string;
-      onboarding_completed?: boolean;
-    }>(response.data);
-
-    return {
-      user: data.user,
-      tokens: {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      },
-      onboarding_completed: Boolean(data.onboarding_completed),
-    };
+    return unwrap<SessionResponse>(response.data);
   },
 
   signup: async (payload: SignupPayload): Promise<SignupResponse> => {
@@ -36,54 +29,34 @@ export const authApi = {
       ...payload,
       email: payload.email.trim().toLowerCase(),
     });
-    return response.data;
+    return unwrap<SignupResponse>(response.data);
   },
 
   resendVerification: async (email: string): Promise<{ message: string }> => {
-    const response = await apiClient.post('/auth/resend-verification', { email: email.trim().toLowerCase() });
-    return response.data;
-  },
-
-  signupStatus: async (email: string, pollToken: string): Promise<{ 
-    status: string; 
-    onboarding_completed?: boolean;
-    access_token?: string;
-    refresh_token?: string;
-    user?: { id: string; email: string; name: string; organizationName?: string; };
-  }> => {
-    const response = await apiClient.get('/auth/signup-status', {
-      params: { email: email.trim().toLowerCase(), poll_token: pollToken },
+    const response = await apiClient.post('/auth/resend-verification', {
+      email: email.trim().toLowerCase(),
     });
-    return unwrap<{ 
-      status: string; 
-      onboarding_completed?: boolean;
-      access_token?: string;
-      refresh_token?: string;
-      user?: { id: string; email: string; name: string; organizationName?: string; };
-    }>(response.data);
+    return unwrap<{ message: string }>(response.data);
   },
 
-  refresh: async (refreshToken: string): Promise<AuthTokens & { onboarding_completed?: boolean }> => {
-    const response = await apiClient.post('/auth/refresh', { refresh_token: refreshToken });
-    const data = unwrap<{
-      access_token: string;
-      refresh_token: string;
-      onboarding_completed?: boolean;
-    }>(response.data);
+  signupStatus: async (email: string): Promise<SignupStatusResponse> => {
+    const response = await apiClient.post('/auth/signup-status', {
+      email: email.trim().toLowerCase(),
+    });
+    return unwrap<SignupStatusResponse>(response.data);
+  },
 
-    return {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      onboarding_completed: data.onboarding_completed,
-    };
+  refresh: async (): Promise<RefreshResponse> => {
+    const response = await apiClient.post('/auth/refresh');
+    return unwrap<RefreshResponse>(response.data);
   },
 
   logout: async (): Promise<void> => {
     await apiClient.post('/auth/logout');
   },
 
-  getMe: async (): Promise<User> => {
+  getSession: async (): Promise<SessionResponse> => {
     const response = await apiClient.get('/auth/me');
-    return unwrap<User>(response.data);
+    return unwrap<SessionResponse>(response.data);
   },
 };
